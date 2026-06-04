@@ -1,0 +1,43 @@
+package domain
+
+import "errors"
+
+var (
+	ErrInvalidStartingPrice   = errors.New("起拍价不能为负数")
+	ErrInvalidBidIncrement    = errors.New("加价幅度必须大于 0")
+	ErrCapBelowStarting       = errors.New("封顶价不能低于起拍价")
+	ErrInvalidDuration        = errors.New("竞拍时长必须大于 0")
+	ErrInvalidExtendThreshold = errors.New("延时触发窗口必须大于 0")
+	ErrInvalidExtendSec       = errors.New("延时秒数须在 10–30 之间")
+	ErrInvalidStateTransition = errors.New("非法的场次状态迁移")
+	ErrRulesNotEditable       = errors.New("仅未开始场次可修改规则")
+	ErrSessionNotBiddable     = errors.New("当前场次不可出价")
+
+	ErrNotFound              = errors.New("资源不存在")
+	ErrForbidden             = errors.New("无权操作")
+	ErrUnauthorized          = errors.New("未登录")
+	ErrInvalidCredentials    = errors.New("手机号或密码错误")
+	ErrPhoneAlreadyExists    = errors.New("该手机号已注册")
+	ErrInvalidPhone          = errors.New("手机号格式不正确")
+	ErrWeakPassword          = errors.New("密码至少 6 位")
+	ErrInvalidNickname       = errors.New("昵称不能为空")
+	ErrRoleNotAllowed        = errors.New("不允许注册该角色")
+	ErrProductNotEditable    = errors.New("当前商品状态不可编辑")
+	ErrProductNotDeletable   = errors.New("当前商品不可删除")
+	ErrActiveSessionExists   = errors.New("该商品已有进行中的竞拍场次")
+	ErrProductNotPublishable = errors.New("当前商品不可发布竞拍")
+	ErrInvalidProductName    = errors.New("商品名称不能为空")
+	ErrSessionHasBids        = errors.New("已有出价，不可修改规则")
+	ErrSessionNotCancellable   = errors.New("当前场次不可取消")
+	ErrCancelReasonRequired    = errors.New("请填写取消原因")
+	ErrOrderAlreadyExists      = errors.New("订单已存在")
+	ErrSettlementNoWinner      = errors.New("成交须指定胜者")
+
+	ErrBidTooLow           = errors.New("出价低于最低合法价")
+	ErrBidExceedsCap       = errors.New("出价超过封顶价")
+	ErrAuctionEnded        = errors.New("竞拍已结束")
+	ErrRequestIDRequired   = errors.New("requestId 不能为空")
+	ErrVersionConflict     = errors.New("出价冲突，请重试")
+	ErrSessionLockBusy     = errors.New("场次繁忙，请稍后重试")
+	ErrAuctionNotVisible   = errors.New("场次不可见")
+)
