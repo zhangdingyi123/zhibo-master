@@ -11,7 +11,6 @@ import type { AuctionSession, ProductView } from '../../api/types'
 import { formatCents } from '../../utils/money'
 import { AuctionRulesForm } from '../components/AuctionRulesForm'
 import { StatusBadge } from '../components/StatusBadge'
-import { StreamPushInfo } from '../components/StreamPushInfo'
 import {
   ORDER_STATUS_LABEL,
   PRODUCT_STATUS_LABEL,
@@ -163,10 +162,6 @@ export function ProductDetailPage() {
               <dt>房间号</dt>
               <dd>
                 <code>{auction.roomId}</code>
-              </dd>
-              <dt>推流</dt>
-              <dd>
-                <StreamPushInfo roomId={auction.roomId} />
               </dd>
               <dt>当前价</dt>
               <dd>{formatCents(auction.currentPrice)}</dd>

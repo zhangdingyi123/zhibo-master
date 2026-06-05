@@ -752,8 +752,25 @@ body {
   object-fit: cover;
 }
 
+.live-video__cover--mock {
+  animation: mock-live-pan 18s ease-in-out infinite alternate;
+}
+
+@keyframes mock-live-pan {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
 .live-video__gradient {
   background: linear-gradient(145deg, #1a1020, #2d1a3a, #1a2438);
+}
+
+.live-video__gradient--mock {
+  animation: mock-live-pan 18s ease-in-out infinite alternate;
 }
 
 .live-video__scan {

@@ -44,8 +44,6 @@ go run ./cmd/server
 
 WebSocket 实时通信（阶段 4）：`ws://localhost:8081/api/v1/ws?roomId=room_sess_1&openId=buyer_001`，协议见 [docs/ws-protocol.md](./docs/ws-protocol.md)。
 
-**推拉流（SRS）**：完整六步教程见 [docs/streaming.md](./docs/streaming.md)。快速验证：`./scripts/stream_demo.sh room_sess_1`，再打开 `/app/live/room_sess_1`。
-
 ### 3. 前端
 
 ```bash
