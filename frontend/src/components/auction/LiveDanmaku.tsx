@@ -28,7 +28,7 @@ export function LiveDanmaku({ lastEvent, participantCount }: Props) {
     if (!lastEvent?.type) return
     if (lastEvent.type !== EventBidNew) return
     const p = lastEvent.payload as BidNewPayload | undefined
-    const amount = p?.bid?.amountCents
+    const amount = p?.bid?.amount
     if (amount == null) return
     const yuan = (amount / 100).toFixed(amount % 100 === 0 ? 0 : 2)
     const id = `dm-${lastEvent.seq ?? Date.now()}`

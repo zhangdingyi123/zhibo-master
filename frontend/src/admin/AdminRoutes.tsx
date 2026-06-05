@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import { AdminLayout } from '../layouts/AdminLayout'
 import { RequireAdminAuth } from './RequireAdminAuth'
 import { AuctionPublishPage } from './pages/AuctionPublishPage'
