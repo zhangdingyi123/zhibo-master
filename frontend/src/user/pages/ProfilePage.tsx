@@ -8,12 +8,15 @@ import {
   ProfileIcon,
   SettingsIcon,
 } from '../../components/icons/NavIcons'
+import { IsoInboxIcon } from '../../components/icons/IsometricIcons'
+import { useUnreadMessageCount } from '../../hooks/useUnreadMessageCount'
 import { clearSession, getUser, isAnchorOrAdmin, isLoggedIn } from '../../auth/session'
 
 export function ProfilePage() {
   const navigate = useNavigate()
   const user = getUser()
   const loggedIn = isLoggedIn()
+  const { count: unreadMessages } = useUnreadMessageCount()
   const [orderStats, setOrderStats] = useState({
     total: 0,
     pendingPay: 0,
@@ -114,6 +117,18 @@ export function ProfilePage() {
       <section className="menu-card">
         <h3 className="menu-card__title">快捷入口</h3>
         <ul className="menu-list">
+          <li>
+            <Link to="/app/messages" className="menu-list__item menu-list__item--glass">
+              <span className="menu-list__icon menu-list__icon--iso" aria-hidden>
+                <IsoInboxIcon />
+              </span>
+              <span className="menu-list__label">消息中心</span>
+              {unreadMessages > 0 && (
+                <span className="menu-list__badge">{unreadMessages}</span>
+              )}
+              <span className="menu-list__arrow" aria-hidden>›</span>
+            </Link>
+          </li>
           <li>
             <Link to="/app/orders" className="menu-list__item">
               <span className="menu-list__icon" aria-hidden>

@@ -42,6 +42,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	sessionRepo := repository.NewSessionRepo(db)
 	orderRepo := repository.NewOrderRepo(db)
 	bidRepo := repository.NewBidRepo(db)
+	messageRepo := repository.NewMessageRepo(db)
 
 	orderSvc := service.NewOrderService(orderRepo)
 	productSvc := service.NewProductService(productRepo, sessionRepo, orderRepo)
@@ -64,10 +65,12 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	}
 
 	hub := ws.NewHub(sessionRepo, bidRepo, userAuctionSvc, bidSvc)
-	roomNotifier := ws.NewNotifier(hub, bidRepo)
+	wsNotifier := ws.NewNotifier(hub, bidRepo)
 	if roomCache != nil {
-		roomNotifier.SetRoomCache(roomCache)
+		wsNotifier.SetRoomCache(roomCache)
 	}
+	messageSvc := service.NewMessageService(messageRepo, bidRepo)
+	roomNotifier := service.NewCompositeRoomNotifier(wsNotifier, messageSvc)
 	bidSvc.SetRoomNotifier(roomNotifier)
 	auctionSvc.SetRoomNotifier(roomNotifier)
 
@@ -85,6 +88,8 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	orderH := handler.NewOrderHandler(orderSvc)
 	userAuctionH := handler.NewUserAuctionHandler(userAuctionSvc, bidSvc)
 	userOrderH := handler.NewUserOrderHandler(orderSvc)
+	messageH := handler.NewMessageHandler(messageSvc)
+	streamH := handler.NewStreamHandler(cfg)
 
 	v1 := r.Group("/api/v1")
 	{
@@ -103,6 +108,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		user.GET("/auctions/:sessionId", userAuctionH.Get)
 		user.GET("/auctions/:sessionId/snapshot", userAuctionH.Snapshot)
 		user.GET("/rooms/:roomId/snapshot", userAuctionH.SnapshotByRoom)
+		user.GET("/streams/:roomId", streamH.GetByRoom)
 
 		user.POST("/auctions/:sessionId/bids", middleware.RequireAuth(userRepo, cfg.JWTSecret), userAuctionH.PlaceBid)
 
@@ -113,6 +119,11 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 			userAuth.GET("/orders/:id", userOrderH.Get)
 			userAuth.GET("/auctions/:sessionId/order", userOrderH.GetBySession)
 			userAuth.POST("/orders/:id/mock-pay", userOrderH.MockPay)
+
+			userAuth.GET("/messages", messageH.List)
+			userAuth.GET("/messages/unread-count", messageH.UnreadCount)
+			userAuth.POST("/messages/:id/read", messageH.MarkRead)
+			userAuth.POST("/messages/read-all", messageH.MarkAllRead)
 		}
 	}
 

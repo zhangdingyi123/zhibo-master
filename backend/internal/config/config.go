@@ -15,6 +15,8 @@ type Config struct {
 	FrontendURL  string
 	FrontendURLs []string
 	JWTSecret    string
+	StreamRTMPHost string
+	StreamHLSBase  string
 }
 
 func Load() Config {
@@ -32,7 +34,9 @@ func Load() Config {
 		RedisDB:      redisDB,
 		FrontendURL:  frontendURL,
 		FrontendURLs: frontendURLs,
-		JWTSecret:    getEnv("JWT_SECRET", "zhibo-dev-jwt-secret-change-in-prod"),
+		JWTSecret:        getEnv("JWT_SECRET", "zhibo-dev-jwt-secret-change-in-prod"),
+		StreamRTMPHost:   getEnv("STREAM_RTMP_HOST", "localhost:1935"),
+		StreamHLSBase:    getEnv("STREAM_HLS_BASE", "/live"),
 	}
 }
 

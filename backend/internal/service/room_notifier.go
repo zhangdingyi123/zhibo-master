@@ -13,6 +13,12 @@ type RoomNotifier interface {
 	OnCancelled(ctx context.Context, session *domain.AuctionSession, reason string)
 }
 
+// BidAwareNotifier 支持写扩散前快照（领先者）
+type BidAwareNotifier interface {
+	RoomNotifier
+	OnBidWithPrevWinner(ctx context.Context, result *PlaceBidResult, prevEndAt *time.Time, prevWinnerID *uint64)
+}
+
 // NoopRoomNotifier 空实现
 type NoopRoomNotifier struct{}
 

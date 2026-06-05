@@ -29,6 +29,16 @@ services:
       timeout: 3s
       retries: 20
 
+  srs:
+    image: ossrs/srs:5
+    container_name: zhibo-srs
+    restart: unless-stopped
+    ports:
+      - "1935:1935"
+    volumes:
+      - ./deploy/srs.conf:/usr/local/srs/conf/srs.conf:ro
+    command: ["./objs/srs", "-c", "conf/srs.conf"]
+
   backend:
     build:
       context: ./backend
@@ -44,6 +54,8 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-https://jj520.xyz}
       FRONTEND_URLS: ${FRONTEND_URLS:-https://jj520.xyz,https://mgongchang.xyz}
       JWT_SECRET: ${JWT_SECRET:-please-change-me}
+      STREAM_RTMP_HOST: ${STREAM_RTMP_HOST:-localhost:1935}
+      STREAM_HLS_BASE: ${STREAM_HLS_BASE:-/live}
     depends_on:
       mysql:
         condition: service_healthy
@@ -70,6 +82,7 @@ services:
     depends_on:
       - frontend
       - backend
+      - srs
 
 volumes:
   mysql_data:

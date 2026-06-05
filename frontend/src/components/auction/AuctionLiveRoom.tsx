@@ -153,6 +153,7 @@ export function AuctionLiveRoom({
         <div className="live-room__main">
           <div className="live-room__video-wrap">
             <LiveVideo
+              roomId={roomId}
               title={productTitle}
               coverUrl={coverUrl}
               viewerCount={snapshot?.participantCount}

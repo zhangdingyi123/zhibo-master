@@ -31,6 +31,16 @@ services:
       timeout: 3s
       retries: 10
 
+  srs:
+    image: ossrs/srs:5
+    container_name: zhibo-srs
+    ports:
+      - "1935:1935"   # RTMP 推流
+      - "8080:8080"   # HLS / HTTP-FLV 拉流
+    volumes:
+      - ./deploy/srs.conf:/usr/local/srs/conf/srs.conf:ro
+    command: ["./objs/srs", "-c", "conf/srs.conf"]
+
 volumes:
   mysql_data:
   redis_data:

@@ -104,6 +104,10 @@ func (s *BidService) placeBidLocked(ctx context.Context, userID, sessionID uint6
 		return nil, err
 	}
 	prevEndAt := session.EndAt
+	prevWinnerID, err := s.bids.GetWinningUserIDTx(ctx, tx, sessionID)
+	if err != nil {
+		return nil, err
+	}
 
 	now := time.Now()
 	outcome, err := engine.EvaluateBid(engine.SessionViewFrom(session), amount, now)
@@ -215,7 +219,11 @@ func (s *BidService) placeBidLocked(ctx context.Context, userID, sessionID uint6
 			_ = s.cache.OnBid(ctx, session, userID, bid.Amount, bid.Seq, !hadBid)
 		}
 		if s.notify != nil {
-			s.notify.OnBid(ctx, result, prevEndAt)
+			if aware, ok := s.notify.(BidAwareNotifier); ok {
+				aware.OnBidWithPrevWinner(ctx, result, prevEndAt, prevWinnerID)
+			} else {
+				s.notify.OnBid(ctx, result, prevEndAt)
+			}
 		}
 	}
 	return result, err

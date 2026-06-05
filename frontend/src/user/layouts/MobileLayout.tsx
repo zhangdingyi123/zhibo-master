@@ -6,6 +6,7 @@ import {
   ProfileIcon,
 } from '../../components/icons/NavIcons'
 import { usePendingPayCount } from '../../hooks/usePendingPayCount'
+import { useUnreadMessageCount } from '../../hooks/useUnreadMessageCount'
 
 const IMMERSIVE_PATTERN = /^\/app\/(live|result)\//
 
@@ -20,6 +21,7 @@ export function MobileLayout() {
   const { pathname } = useLocation()
   const immersive = IMMERSIVE_PATTERN.test(pathname)
   const { count: pendingPayCount } = usePendingPayCount()
+  const { count: unreadMessages } = useUnreadMessageCount()
 
   return (
     <div className={`mobile-shell${immersive ? ' mobile-shell--immersive' : ''}`}>
@@ -44,6 +46,11 @@ export function MobileLayout() {
                   {tab.to === '/app/orders' && pendingPayCount > 0 && (
                     <span className="mobile-tab__badge" aria-label={`${pendingPayCount} 笔待支付`}>
                       {pendingPayCount > 9 ? '9+' : pendingPayCount}
+                    </span>
+                  )}
+                  {tab.to === '/app/profile' && unreadMessages > 0 && (
+                    <span className="mobile-tab__badge mobile-tab__badge--msg" aria-label={`${unreadMessages} 条未读消息`}>
+                      {unreadMessages > 9 ? '9+' : unreadMessages}
                     </span>
                   )}
                 </span>

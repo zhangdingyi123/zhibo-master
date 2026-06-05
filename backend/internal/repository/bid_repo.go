@@ -31,6 +31,39 @@ func (r *BidRepo) GetByRequestIDTx(ctx context.Context, tx *sql.Tx, sessionID ui
 	return scanBidRow(row)
 }
 
+// GetWinningUserIDTx 当前领先出价者（写扩散前快照）
+func (r *BidRepo) GetWinningUserIDTx(ctx context.Context, tx *sql.Tx, sessionID uint64) (*uint64, error) {
+	const q = `SELECT user_id FROM bids WHERE session_id = ? AND is_winning = 1 LIMIT 1`
+	var uid uint64
+	err := tx.QueryRowContext(ctx, q, sessionID).Scan(&uid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &uid, nil
+}
+
+// ListParticipantUserIDs 场次参与用户（写扩散收件人）
+func (r *BidRepo) ListParticipantUserIDs(ctx context.Context, sessionID uint64) ([]uint64, error) {
+	const q = `SELECT DISTINCT user_id FROM bids WHERE session_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("list participants: %w", err)
+	}
+	defer rows.Close()
+	var ids []uint64
+	for rows.Next() {
+		var id uint64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (r *BidRepo) UserHasBid(ctx context.Context, tx *sql.Tx, sessionID, userID uint64) (bool, error) {
 	const q = `SELECT 1 FROM bids WHERE session_id = ? AND user_id = ? LIMIT 1`
 	var one int

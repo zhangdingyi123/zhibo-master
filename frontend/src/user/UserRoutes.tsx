@@ -6,6 +6,7 @@ import { HistoryPage } from './pages/HistoryPage'
 import { LiveRoomPage } from './pages/LiveRoomPage'
 import { MyOrdersPage } from './pages/MyOrdersPage'
 import { OrderPayPage } from './pages/OrderPayPage'
+import { MessagesPage } from './pages/MessagesPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { UserLoginPage } from './pages/LoginPage'
 import { UserRegisterPage } from './pages/RegisterPage'
@@ -24,6 +25,7 @@ export function UserRoutes() {
         <Route path="orders" element={<MyOrdersPage />} />
         <Route path="orders/:orderId" element={<OrderPayPage />} />
         <Route path="result/:sessionId" element={<ResultPage />} />
+        <Route path="messages" element={<MessagesPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Routes>
