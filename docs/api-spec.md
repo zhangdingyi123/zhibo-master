@@ -271,9 +271,11 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/orders` | 我的订单列表，`?status=pending_pay&page=1` |
-| GET | `/api/v1/orders/:id` | 订单详情（仅买家本人） |
-| GET | `/api/v1/auctions/:sessionId/order` | 按场次查本人订单 |
-| POST | `/api/v1/orders/:id/mock-pay` | 模拟支付（`pending_pay` → `paid`） |
+| GET | `/api/v1/orders` | 我的订单列表（含 `product` 摘要，避免 N+1），`?status=pending_pay` |
+| GET | `/api/v1/orders/:id` | 订单详情 + 商品摘要（仅买家本人） |
+| GET | `/api/v1/auctions/:sessionId/order` | 按场次查本人订单 + 商品摘要 |
+| POST | `/api/v1/orders/:id/mock-pay` | 模拟支付（`pending_pay` → `paid`，超时返回 409） |
+
+订单创建时写入 `payExpireAt`（默认创建后 30 分钟，环境变量 `PAY_TIMEOUT_MINUTES`）；超时未支付由后台任务自动 `closed`。
 
 历史竞拍：使用 `GET /api/v1/auctions?status=settled`（2.10 列表能力）。

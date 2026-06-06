@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"log"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -44,7 +46,9 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	bidRepo := repository.NewBidRepo(db)
 	messageRepo := repository.NewMessageRepo(db)
 
-	orderSvc := service.NewOrderService(orderRepo)
+	payTimeout := time.Duration(cfg.PayTimeoutMinutes) * time.Minute
+	orderSvc := service.NewOrderService(orderRepo, productRepo, payTimeout)
+	go orderSvc.RunPayExpiryWorker(context.Background())
 	productSvc := service.NewProductService(productRepo, sessionRepo, orderRepo)
 	auctionSvc := service.NewAuctionService(productRepo, sessionRepo, orderSvc)
 	userAuctionSvc := service.NewUserAuctionService(sessionRepo, productRepo)

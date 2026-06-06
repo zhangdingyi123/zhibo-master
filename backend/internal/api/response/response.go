@@ -60,7 +60,8 @@ func mapError(err error) (httpStatus, code int, message string) {
 		errors.Is(err, domain.ErrSessionHasBids),
 		errors.Is(err, domain.ErrSessionNotCancellable),
 		errors.Is(err, domain.ErrInvalidStateTransition),
-		errors.Is(err, domain.ErrOrderAlreadyExists):
+		errors.Is(err, domain.ErrOrderAlreadyExists),
+		errors.Is(err, domain.ErrOrderPayExpired):
 		return http.StatusConflict, 40900, err.Error()
 	case errors.Is(err, domain.ErrCancelReasonRequired),
 		errors.Is(err, domain.ErrSettlementNoWinner),

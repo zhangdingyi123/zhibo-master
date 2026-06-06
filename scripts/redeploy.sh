@@ -41,8 +41,10 @@ echo "==> 健康检查"
 if curl -sf http://127.0.0.1/api/v1/health; then
   echo ""
   echo "✓ 部署成功"
-  echo "  用户端: https://jj520.xyz/app"
-  echo "  主播端: https://mgongchang.xyz/admin"
+  IP="$(curl -sf ifconfig.me 2>/dev/null || true)"
+  IP="${IP:-<ECS公网IP>}"
+  echo "  用户端: http://${IP}/app"
+  echo "  主播端: http://${IP}/admin"
 else
   echo ""
   echo "✗ API 未响应，查看日志: $COMPOSE -f $COMPOSE_FILE logs --tail 80 backend" >&2

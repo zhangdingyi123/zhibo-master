@@ -30,9 +30,11 @@ export function ProfilePage() {
       .then((res) => {
         if (cancelled) return
         setOrderStats({
-          total: res.items.length,
-          pendingPay: res.items.filter((o) => o.status === 'pending_pay').length,
-          paid: res.items.filter((o) => o.status === 'paid' || o.status === 'closed').length,
+          total: res.total,
+          pendingPay: res.items.filter((o) => o.order.status === 'pending_pay').length,
+          paid: res.items.filter(
+            (o) => o.order.status === 'paid' || o.order.status === 'closed',
+          ).length,
         })
       })
       .catch(() => {})

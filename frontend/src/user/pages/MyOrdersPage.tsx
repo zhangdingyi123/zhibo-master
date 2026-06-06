@@ -1,20 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAuction, listMyOrders } from '../../api/user'
-import type { Order } from '../../api/types'
-import type { ProductBrief } from '../../api/user'
+import { listMyOrders } from '../../api/user'
+import type { OrderListItem } from '../../api/types'
 import { ORDER_STATUS_LABEL } from '../../admin/labels'
 import { isLoggedIn } from '../../auth/session'
 import { formatCents } from '../../utils/money'
 
-type OrderRow = {
-  order: Order
-  product: ProductBrief | null
-}
-
 export function MyOrdersPage() {
   const loggedIn = isLoggedIn()
-  const [rows, setRows] = useState<OrderRow[]>([])
+  const [rows, setRows] = useState<OrderListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,26 +19,8 @@ export function MyOrdersPage() {
     }
     let cancelled = false
     listMyOrders({ page: 1, pageSize: 50 })
-      .then(async (res) => {
-        const enriched = await Promise.all(
-          res.items.map(async (order) => {
-            try {
-              const detail = await getAuction(order.sessionId)
-              return {
-                order,
-                product: {
-                  id: detail.product.id,
-                  name: detail.product.name,
-                  description: detail.product.description,
-                  coverUrl: detail.product.coverUrl,
-                },
-              }
-            } catch {
-              return { order, product: null }
-            }
-          }),
-        )
-        if (!cancelled) setRows(enriched)
+      .then((res) => {
+        if (!cancelled) setRows(res.items)
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : '加载失败')
@@ -75,7 +51,7 @@ export function MyOrdersPage() {
     <div className="user-page">
       <header className="user-page__head">
         <h1>我的订单</h1>
-        <p className="page-desc">中标后订单将自动生成，请及时完成支付</p>
+        <p className="page-desc">中标后订单将自动生成，请在 30 分钟内完成支付</p>
       </header>
 
       {loading && <p className="user-hint">加载中…</p>}

@@ -93,11 +93,13 @@ cd frontend && npm run build
 
 ## 阿里云部署
 
-完整步骤见 **[docs/deploy-aliyun.md](./docs/deploy-aliyun.md)**（ECS + Docker Compose + 双域名 + HTTPS）。
+完整步骤见 **[docs/deploy-aliyun.md](./docs/deploy-aliyun.md)**。
+
+生产演示用 **公网 IP** 访问（免备案）：`http://<IP>/app`、`http://<IP>/admin`。域名上线见 [docs/icp-filing.md](docs/icp-filing.md)。
 
 快速启动（服务器上）：
 
 ```bash
-cp .env.example .env   # 编辑密码与 JWT_SECRET
-docker compose -f docker-compose.prod.yml up -d --build
+cp .env.example .env   # 密码、JWT、FRONTEND_URL=http://你的公网IP
+./scripts/manual-deploy.sh
 ```

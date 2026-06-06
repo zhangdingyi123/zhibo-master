@@ -21,8 +21,9 @@ type Order struct {
 	BuyerID   uint64      `json:"buyerId"`
 	SellerID  uint64      `json:"sellerId"`
 	Amount    int64       `json:"amount"`
-	Status    OrderStatus `json:"status"`
-	PaidAt    *time.Time  `json:"paidAt,omitempty"`
+	Status      OrderStatus `json:"status"`
+	PayExpireAt *time.Time  `json:"payExpireAt,omitempty"`
+	PaidAt      *time.Time  `json:"paidAt,omitempty"`
 	CreatedAt time.Time   `json:"createdAt"`
 	UpdatedAt time.Time   `json:"updatedAt"`
 }

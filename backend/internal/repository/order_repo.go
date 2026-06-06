@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/zhibo/backend/internal/domain"
 )
@@ -19,10 +20,10 @@ func NewOrderRepo(db *sql.DB) *OrderRepo {
 }
 
 func (r *OrderRepo) CreateTx(ctx context.Context, tx *sql.Tx, o *domain.Order) error {
-	const q = `INSERT INTO orders (order_no, session_id, product_id, buyer_id, seller_id, amount, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
+	const q = `INSERT INTO orders (order_no, session_id, product_id, buyer_id, seller_id, amount, status, pay_expire_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	res, err := tx.ExecContext(ctx, q,
-		o.OrderNo, o.SessionID, o.ProductID, o.BuyerID, o.SellerID, o.Amount, string(o.Status),
+		o.OrderNo, o.SessionID, o.ProductID, o.BuyerID, o.SellerID, o.Amount, string(o.Status), nullTime(o.PayExpireAt),
 	)
 	if err != nil {
 		return fmt.Errorf("insert order: %w", err)
@@ -36,10 +37,10 @@ func (r *OrderRepo) CreateTx(ctx context.Context, tx *sql.Tx, o *domain.Order) e
 }
 
 func (r *OrderRepo) Create(ctx context.Context, o *domain.Order) error {
-	const q = `INSERT INTO orders (order_no, session_id, product_id, buyer_id, seller_id, amount, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
+	const q = `INSERT INTO orders (order_no, session_id, product_id, buyer_id, seller_id, amount, status, pay_expire_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	res, err := r.db.ExecContext(ctx, q,
-		o.OrderNo, o.SessionID, o.ProductID, o.BuyerID, o.SellerID, o.Amount, string(o.Status),
+		o.OrderNo, o.SessionID, o.ProductID, o.BuyerID, o.SellerID, o.Amount, string(o.Status), nullTime(o.PayExpireAt),
 	)
 	if err != nil {
 		return fmt.Errorf("insert order: %w", err)
@@ -53,7 +54,7 @@ func (r *OrderRepo) Create(ctx context.Context, o *domain.Order) error {
 }
 
 func (r *OrderRepo) GetByID(ctx context.Context, id uint64) (*domain.Order, error) {
-	const q = `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, paid_at, created_at, updated_at
+	const q = `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, pay_expire_at, paid_at, created_at, updated_at
 		FROM orders WHERE id = ?`
 	row := r.db.QueryRowContext(ctx, q, id)
 	o, err := scanOrderRow(row)
@@ -67,7 +68,7 @@ func (r *OrderRepo) GetByID(ctx context.Context, id uint64) (*domain.Order, erro
 }
 
 func (r *OrderRepo) GetBySessionID(ctx context.Context, sessionID uint64) (*domain.Order, error) {
-	const q = `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, paid_at, created_at, updated_at
+	const q = `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, pay_expire_at, paid_at, created_at, updated_at
 		FROM orders WHERE session_id = ?`
 	row := r.db.QueryRowContext(ctx, q, sessionID)
 	o, err := scanOrderRow(row)
@@ -121,7 +122,7 @@ func (r *OrderRepo) List(ctx context.Context, f OrderFilter) ([]domain.Order, in
 		return nil, 0, fmt.Errorf("count orders: %w", err)
 	}
 
-	listQ := `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, paid_at, created_at, updated_at
+	listQ := `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, pay_expire_at, paid_at, created_at, updated_at
 		FROM orders WHERE ` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
 	listArgs := append(append([]any{}, args...), f.PageSize, offset)
 	rows, err := r.db.QueryContext(ctx, listQ, listArgs...)
@@ -151,7 +152,7 @@ func (r *OrderRepo) MapLatestByProductIDs(ctx context.Context, productIDs []uint
 	placeholders := placeholders(len(productIDs))
 	args := uint64sToAny(productIDs)
 
-	q := `SELECT o.id, o.order_no, o.session_id, o.product_id, o.buyer_id, o.seller_id, o.amount, o.status, o.paid_at, o.created_at, o.updated_at
+	q := `SELECT o.id, o.order_no, o.session_id, o.product_id, o.buyer_id, o.seller_id, o.amount, o.status, o.pay_expire_at, o.paid_at, o.created_at, o.updated_at
 		FROM orders o
 		INNER JOIN (
 			SELECT product_id, MAX(id) AS max_id FROM orders WHERE product_id IN (` + placeholders + `) GROUP BY product_id
@@ -174,6 +175,17 @@ func (r *OrderRepo) MapLatestByProductIDs(ctx context.Context, productIDs []uint
 	return out, rows.Err()
 }
 
+// CloseExpiredPending 将已过期的待支付订单关单
+func (r *OrderRepo) CloseExpiredPending(ctx context.Context, now time.Time) (int64, error) {
+	const q = `UPDATE orders SET status = ?, updated_at = NOW(3)
+		WHERE status = ? AND pay_expire_at IS NOT NULL AND pay_expire_at < ?`
+	res, err := r.db.ExecContext(ctx, q, string(domain.OrderStatusClosed), string(domain.OrderStatusPendingPay), now)
+	if err != nil {
+		return 0, fmt.Errorf("close expired orders: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 func (r *OrderRepo) MarkPaid(ctx context.Context, orderID uint64) error {
 	const q = `UPDATE orders SET status = ?, paid_at = NOW(3), updated_at = NOW(3) WHERE id = ? AND status = ?`
 	res, err := r.db.ExecContext(ctx, q, string(domain.OrderStatusPaid), orderID, string(domain.OrderStatusPendingPay))
@@ -193,15 +205,19 @@ func (r *OrderRepo) MarkPaid(ctx context.Context, orderID uint64) error {
 func scanOrderRow(row *sql.Row) (*domain.Order, error) {
 	var o domain.Order
 	var status string
-	var paidAt sql.NullTime
+	var payExpireAt, paidAt sql.NullTime
 	err := row.Scan(
 		&o.ID, &o.OrderNo, &o.SessionID, &o.ProductID, &o.BuyerID, &o.SellerID,
-		&o.Amount, &status, &paidAt, &o.CreatedAt, &o.UpdatedAt,
+		&o.Amount, &status, &payExpireAt, &paidAt, &o.CreatedAt, &o.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	o.Status = domain.OrderStatus(status)
+	if payExpireAt.Valid {
+		t := payExpireAt.Time
+		o.PayExpireAt = &t
+	}
 	if paidAt.Valid {
 		t := paidAt.Time
 		o.PaidAt = &t
@@ -212,18 +228,29 @@ func scanOrderRow(row *sql.Row) (*domain.Order, error) {
 func scanOrderFromRows(rows *sql.Rows) (*domain.Order, error) {
 	var o domain.Order
 	var status string
-	var paidAt sql.NullTime
+	var payExpireAt, paidAt sql.NullTime
 	err := rows.Scan(
 		&o.ID, &o.OrderNo, &o.SessionID, &o.ProductID, &o.BuyerID, &o.SellerID,
-		&o.Amount, &status, &paidAt, &o.CreatedAt, &o.UpdatedAt,
+		&o.Amount, &status, &payExpireAt, &paidAt, &o.CreatedAt, &o.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	o.Status = domain.OrderStatus(status)
+	if payExpireAt.Valid {
+		t := payExpireAt.Time
+		o.PayExpireAt = &t
+	}
 	if paidAt.Valid {
 		t := paidAt.Time
 		o.PaidAt = &t
 	}
 	return &o, nil
+}
+
+func nullTime(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return *t
 }

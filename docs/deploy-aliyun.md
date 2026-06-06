@@ -1,9 +1,10 @@
 # 阿里云 ECS 部署完整教程
 
-> 适用场景：一台 ECS + Docker Compose，双域名  
-> - 用户端：`jj520.xyz` → `/app`  
-> - 主播端：`mgongchang.xyz` → `/admin`  
-> - MySQL / Redis 与应用同机 Docker 运行
+> **当前推荐（免备案）**：公网 IP 直访  
+> - 用户端：`http://47.97.176.185/app`  
+> - 主播端：`http://47.97.176.185/admin`  
+>
+> 域名 `jj520.xyz` / `mgongchang.xyz` 须 ICP 备案，见 [icp-filing.md](./icp-filing.md)
 
 ---
 
@@ -11,20 +12,20 @@
 
 ```
                     ┌─────────────────────────────────┐
-  jj520.xyz ───────►│  Nginx (80/443)                 │
-  mgongchang.xyz ──►│  ├─ /api/*  → backend:8081      │
-                    │  └─ /*      → frontend (SPA)    │
+  http://公网IP ───►│  Nginx (80)                     │
+                    │  ├─ /api/*  → zhibo-backend     │
+                    │  └─ /*      → zhibo-frontend    │
                     │       backend → mysql / redis     │
                     └─────────────────────────────────┘
 ```
 
 | 组件 | 说明 |
 |------|------|
-| ECS | 1 台云服务器，跑全部容器 |
-| 域名 | 两个域名 A 记录指向 ECS 公网 IP |
+| ECS | 大陆节点，公网 IP 解析域名 |
+| 访问 | **IP + 路径**（免备案）；域名见 [icp-filing.md](./icp-filing.md) |
 | MySQL | Docker 容器，首次启动自动执行 `backend/migrations/*.sql` |
 | Redis | Docker 容器，缓存 + 分布式锁 |
-| Nginx | 双域名入口 + API/WebSocket 反代 |
+| Nginx | 双域名反代 API / 前端 |
 
 ---
 
@@ -313,9 +314,13 @@ docker compose -f docker-compose.prod.yml logs -f nginx
 # 重启单个服务
 docker compose -f docker-compose.prod.yml restart backend
 
-# 更新代码后重新部署
+# 更新代码后重新部署（推荐一键脚本）
+bash scripts/ecs-update.sh
+
+# 或分步执行：
 git pull
-docker compose -f docker-compose.prod.yml up -d --build
+bash scripts/migrate.sh          # 已有数据卷时必须手动跑增量迁移
+bash scripts/redeploy.sh
 
 # 停止全部
 docker compose -f docker-compose.prod.yml down
@@ -323,6 +328,44 @@ docker compose -f docker-compose.prod.yml down
 # 停止并删除数据卷（慎用！会清空数据库）
 docker compose -f docker-compose.prod.yml down -v
 ```
+
+### 增量数据库迁移
+
+> MySQL 容器**只在首次创建数据卷**时执行 `backend/migrations/*.sql`。  
+> 后续新增迁移（如 `005_order_pay_expire.sql`）需**手动执行**。
+
+```bash
+cd /opt/zhibo
+
+# 自动检测并应用未执行的迁移（可重复运行）
+bash scripts/migrate.sh
+```
+
+**手动验证迁移是否成功**：
+
+```bash
+# 1. 确认 pay_expire_at 字段存在
+docker compose -f docker-compose.prod.yml exec mysql sh -c \
+  'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "
+    SHOW COLUMNS FROM orders LIKE '\''pay_expire_at'\'';
+  "'
+
+# 期望输出含：pay_expire_at | datetime(3) | YES | ...
+
+# 2. 查看待支付订单是否已补截止时间
+docker compose -f docker-compose.prod.yml exec mysql sh -c \
+  'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "
+    SELECT id, order_no, status, pay_expire_at FROM orders WHERE status='\''pending_pay'\'';
+  "'
+
+# 3. 确认 backend 已加载新代码（日志含 order expiry 或重启时间）
+docker compose -f docker-compose.prod.yml logs --tail 20 backend
+```
+
+**API 验证**（登录买家后，浏览器 F12 → Network）：
+
+- `GET /api/v1/orders` 响应中每项应含 `product` 对象，不再只有 `order` 裸字段
+- 订单对象含 `payExpireAt` 字段（待支付时有值）
 
 ### MySQL 备份
 

@@ -31,6 +31,7 @@ var (
 	ErrSessionNotCancellable   = errors.New("当前场次不可取消")
 	ErrCancelReasonRequired    = errors.New("请填写取消原因")
 	ErrOrderAlreadyExists      = errors.New("订单已存在")
+	ErrOrderPayExpired         = errors.New("订单支付已超时")
 	ErrSettlementNoWinner      = errors.New("成交须指定胜者")
 
 	ErrBidTooLow           = errors.New("出价低于最低合法价")

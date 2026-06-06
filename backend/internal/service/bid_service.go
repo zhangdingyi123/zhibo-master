@@ -170,14 +170,16 @@ func (s *BidService) placeBidLocked(ctx context.Context, userID, sessionID uint6
 		if err := s.products.UpdateStatusTx(ctx, tx, session.ProductID, domain.ProductStatusSold); err != nil {
 			return nil, err
 		}
+		expireAt := payExpireAt(now, 30*time.Minute)
 		order = &domain.Order{
-			OrderNo:   generateOrderNo(sessionID),
-			SessionID: sessionID,
-			ProductID: session.ProductID,
-			BuyerID:   userID,
-			SellerID:  session.AnchorID,
-			Amount:    amount,
-			Status:    domain.OrderStatusPendingPay,
+			OrderNo:     generateOrderNo(sessionID),
+			SessionID:   sessionID,
+			ProductID:   session.ProductID,
+			BuyerID:     userID,
+			SellerID:    session.AnchorID,
+			Amount:      amount,
+			Status:      domain.OrderStatusPendingPay,
+			PayExpireAt: &expireAt,
 		}
 		if err := s.orders.CreateTx(ctx, tx, order); err != nil {
 			return nil, err

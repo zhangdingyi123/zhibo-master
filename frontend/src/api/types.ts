@@ -84,9 +84,20 @@ export interface Order {
   sellerId: number
   amount: number
   status: OrderStatus
+  payExpireAt?: string
   paidAt?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface OrderListItem {
+  order: Order
+  product: {
+    id: number
+    name: string
+    description: string
+    coverUrl: string
+  }
 }
 
 export interface Paginated<T> {

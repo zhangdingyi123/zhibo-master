@@ -25,8 +25,8 @@ export function ResultPage() {
       .then((d) => {
         if (!cancelled) setDetail(d)
         if (!cancelled && isLoggedIn() && d.session.winnerId === getUser()?.id) {
-          return getOrderBySession(id).then((o) => {
-            if (!cancelled) setOrder(o)
+          return getOrderBySession(id).then((item) => {
+            if (!cancelled) setOrder(item.order)
           })
         }
         return undefined

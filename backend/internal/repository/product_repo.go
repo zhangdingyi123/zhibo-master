@@ -47,6 +47,32 @@ func (r *ProductRepo) Create(ctx context.Context, p *domain.Product) error {
 	return nil
 }
 
+// MapBriefByIDs 批量查询商品摘要（订单列表 JOIN 用）
+func (r *ProductRepo) MapBriefByIDs(ctx context.Context, ids []uint64) (map[uint64]domain.Product, error) {
+	if len(ids) == 0 {
+		return map[uint64]domain.Product{}, nil
+	}
+	placeholders := placeholders(len(ids))
+	args := uint64sToAny(ids)
+	q := `SELECT id, anchor_id, name, description, cover_url, images, status, created_at, updated_at
+		FROM products WHERE id IN (` + placeholders + `)`
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("map products: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[uint64]domain.Product, len(ids))
+	for rows.Next() {
+		p, err := scanProductRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out[p.ID] = *p
+	}
+	return out, rows.Err()
+}
+
 func (r *ProductRepo) GetByID(ctx context.Context, id uint64) (*domain.Product, error) {
 	const q = `SELECT id, anchor_id, name, description, cover_url, images, status, created_at, updated_at
 		FROM products WHERE id = ?`

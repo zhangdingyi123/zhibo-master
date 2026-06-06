@@ -41,9 +41,10 @@ services:
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: ${REDIS_DB:-0}
-      FRONTEND_URL: ${FRONTEND_URL:-https://jj520.xyz}
-      FRONTEND_URLS: ${FRONTEND_URLS:-https://jj520.xyz,https://mgongchang.xyz}
+      FRONTEND_URL: ${FRONTEND_URL:-http://47.97.176.185}
+      FRONTEND_URLS: ${FRONTEND_URLS:-http://47.97.176.185}
       JWT_SECRET: ${JWT_SECRET:-please-change-me}
+      PAY_TIMEOUT_MINUTES: ${PAY_TIMEOUT_MINUTES:-30}
     depends_on:
       mysql:
         condition: service_healthy

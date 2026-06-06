@@ -2,6 +2,7 @@ import type {
   AuctionRules,
   AuctionSession,
   Order,
+  OrderListItem,
   Paginated,
   Product,
   SessionStatus,
@@ -73,17 +74,17 @@ export function listMyOrders(params?: {
   if (params?.page) q.set('page', String(params.page))
   if (params?.pageSize) q.set('pageSize', String(params.pageSize))
   const qs = q.toString()
-  return userApiRequest<Paginated<Order>>(`/orders${qs ? `?${qs}` : ''}`)
+  return userApiRequest<Paginated<OrderListItem>>(`/orders${qs ? `?${qs}` : ''}`)
 }
 
 export function getOrder(orderId: number) {
-  return userApiRequest<Order>(`/orders/${orderId}`)
+  return userApiRequest<OrderListItem>(`/orders/${orderId}`)
 }
 
 export function getOrderBySession(sessionId: number) {
-  return userApiRequest<Order>(`/auctions/${sessionId}/order`)
+  return userApiRequest<OrderListItem>(`/auctions/${sessionId}/order`)
 }
 
 export function mockPayOrder(orderId: number) {
-  return userApiRequest<Order>(`/orders/${orderId}/mock-pay`, { method: 'POST' })
+  return userApiRequest<OrderListItem>(`/orders/${orderId}/mock-pay`, { method: 'POST' })
 }

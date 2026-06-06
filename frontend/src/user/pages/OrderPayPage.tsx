@@ -1,42 +1,38 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { getAuction, getOrder, mockPayOrder } from '../../api/user'
-import type { Order } from '../../api/types'
-import type { ProductBrief } from '../../api/user'
+import { getOrder, mockPayOrder } from '../../api/user'
+import type { Order, OrderListItem } from '../../api/types'
 import { ORDER_STATUS_LABEL } from '../../admin/labels'
 import { isLoggedIn } from '../../auth/session'
 import { formatCents } from '../../utils/money'
 
+function formatExpireRemaining(payExpireAt?: string) {
+  if (!payExpireAt) return null
+  const ms = new Date(payExpireAt).getTime() - Date.now()
+  if (ms <= 0) return '已超时'
+  const min = Math.floor(ms / 60000)
+  const sec = Math.floor((ms % 60000) / 1000)
+  return `${min}:${sec.toString().padStart(2, '0')}`
+}
+
 export function OrderPayPage() {
   const { orderId } = useParams<{ orderId: string }>()
   const navigate = useNavigate()
-  const [order, setOrder] = useState<Order | null>(null)
-  const [product, setProduct] = useState<ProductBrief | null>(null)
+  const [detail, setDetail] = useState<OrderListItem | null>(null)
+  const [expireLabel, setExpireLabel] = useState<string | null>(null)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const order: Order | null = detail?.order ?? null
+  const product = detail?.product ?? null
 
   useEffect(() => {
     const id = Number(orderId)
     if (!Number.isFinite(id) || !isLoggedIn()) return
     let cancelled = false
     getOrder(id)
-      .then((o) => {
-        if (cancelled) return
-        setOrder(o)
-        return getAuction(o.sessionId)
-          .then((d) => {
-            if (!cancelled) {
-              setProduct({
-                id: d.product.id,
-                name: d.product.name,
-                description: d.product.description,
-                coverUrl: d.product.coverUrl,
-              })
-            }
-          })
-          .catch(() => {
-            if (!cancelled) setProduct(null)
-          })
+      .then((d) => {
+        if (!cancelled) setDetail(d)
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : '加载失败')
@@ -46,13 +42,24 @@ export function OrderPayPage() {
     }
   }, [orderId])
 
+  useEffect(() => {
+    if (!order?.payExpireAt || order.status !== 'pending_pay') {
+      setExpireLabel(null)
+      return
+    }
+    const tick = () => setExpireLabel(formatExpireRemaining(order.payExpireAt))
+    tick()
+    const id = window.setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [order?.payExpireAt, order?.status])
+
   const handlePay = useCallback(async () => {
     if (!order) return
     setPaying(true)
     setError(null)
     try {
       const updated = await mockPayOrder(order.id)
-      setOrder(updated)
+      setDetail(updated)
     } catch (e) {
       setError(e instanceof Error ? e.message : '支付失败')
     } finally {
@@ -112,7 +119,17 @@ export function OrderPayPage() {
             {ORDER_STATUS_LABEL[order.status]}
           </p>
 
-          {order.status === 'pending_pay' && (
+          {order.status === 'pending_pay' && expireLabel && (
+            <p className="user-hint">
+              支付剩余时间：<strong>{expireLabel}</strong>
+            </p>
+          )}
+
+          {order.status === 'closed' && (
+            <p className="user-hint">订单已超时关闭，请联系主播重新竞拍。</p>
+          )}
+
+          {order.status === 'pending_pay' && expireLabel !== '已超时' && (
             <button
               type="button"
               className="btn-primary btn-block"

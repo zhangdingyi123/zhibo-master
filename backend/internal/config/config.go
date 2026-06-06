@@ -15,12 +15,17 @@ type Config struct {
 	FrontendURL  string
 	FrontendURLs []string
 	JWTSecret    string
-	StreamRTMPHost string
-	StreamHLSBase  string
+	StreamRTMPHost   string
+	StreamHLSBase    string
+	PayTimeoutMinutes int
 }
 
 func Load() Config {
 	redisDB, _ := strconv.Atoi(getEnv("REDIS_DB", "0"))
+	payTimeoutMin, _ := strconv.Atoi(getEnv("PAY_TIMEOUT_MINUTES", "30"))
+	if payTimeoutMin < 1 {
+		payTimeoutMin = 30
+	}
 	frontendURL := getEnv("FRONTEND_URL", "http://localhost:5173")
 	frontendURLs := parseCSV(getEnv("FRONTEND_URLS", ""))
 	if len(frontendURLs) == 0 {
@@ -35,8 +40,9 @@ func Load() Config {
 		FrontendURL:  frontendURL,
 		FrontendURLs: frontendURLs,
 		JWTSecret:        getEnv("JWT_SECRET", "zhibo-dev-jwt-secret-change-in-prod"),
-		StreamRTMPHost:   getEnv("STREAM_RTMP_HOST", "localhost:1935"),
-		StreamHLSBase:    getEnv("STREAM_HLS_BASE", "/live"),
+		StreamRTMPHost:    getEnv("STREAM_RTMP_HOST", "localhost:1935"),
+		StreamHLSBase:     getEnv("STREAM_HLS_BASE", "/live"),
+		PayTimeoutMinutes: payTimeoutMin,
 	}
 }
 
