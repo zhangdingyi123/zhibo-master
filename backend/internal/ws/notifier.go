@@ -98,12 +98,20 @@ func (n *Notifier) OnBid(ctx context.Context, result *service.PlaceBidResult, pr
 	}
 
 	if result.Settled {
-		n.hub.Publish(roomID, EventAuctionSettled, SettledPayload{
-			Session:  result.Session,
-			Snapshot: snap,
-			Order:    result.Order,
-		})
+		n.OnSettled(ctx, &result.Session, result.Order)
 	}
+}
+
+func (n *Notifier) OnSettled(ctx context.Context, session *domain.AuctionSession, order *domain.Order) {
+	if n == nil || n.hub == nil || session == nil {
+		return
+	}
+	snap := service.BuildSnapshot(session, time.Now())
+	n.hub.Publish(session.RoomID, EventAuctionSettled, SettledPayload{
+		Session:  *session,
+		Snapshot: snap,
+		Order:    order,
+	})
 }
 
 func (n *Notifier) OnCancelled(ctx context.Context, session *domain.AuctionSession, reason string) {

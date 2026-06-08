@@ -31,6 +31,20 @@ func (r *BidRepo) GetByRequestIDTx(ctx context.Context, tx *sql.Tx, sessionID ui
 	return scanBidRow(row)
 }
 
+// GetWinningUserID 当前领先出价者（is_winning=1）
+func (r *BidRepo) GetWinningUserID(ctx context.Context, sessionID uint64) (*uint64, error) {
+	const q = `SELECT user_id FROM bids WHERE session_id = ? AND is_winning = 1 LIMIT 1`
+	var uid uint64
+	err := r.db.QueryRowContext(ctx, q, sessionID).Scan(&uid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &uid, nil
+}
+
 // GetWinningUserIDTx 当前领先出价者（写扩散前快照）
 func (r *BidRepo) GetWinningUserIDTx(ctx context.Context, tx *sql.Tx, sessionID uint64) (*uint64, error) {
 	const q = `SELECT user_id FROM bids WHERE session_id = ? AND is_winning = 1 LIMIT 1`

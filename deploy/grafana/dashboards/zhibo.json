@@ -1,0 +1,125 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "zhibo_ws_connections", "legendFormat": "连接数" }],
+      "title": "WebSocket 连接",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "zhibo_ws_rooms", "legendFormat": "房间数" }],
+      "title": "活跃房间",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "max": 1, "min": 0, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.1 }, { "color": "red", "value": 0.3 }] } },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "zhibo_bid_failure_rate", "legendFormat": "失败率" }],
+      "title": "出价失败率",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "max": 1, "min": 0, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.01 }] } },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "zhibo_cache_write_failure_rate", "legendFormat": "写失败率" }],
+      "title": "缓存写失败率",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(zhibo_bid_attempts_total[1m])", "legendFormat": "attempts/s" },
+        { "expr": "rate(zhibo_bid_success_total[1m])", "legendFormat": "success/s" },
+        { "expr": "rate(zhibo_bid_failures_total[1m])", "legendFormat": "failures/s" }
+      ],
+      "title": "出价吞吐",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(zhibo_cache_hits_total[1m])", "legendFormat": "hits/s" },
+        { "expr": "rate(zhibo_cache_misses_total[1m])", "legendFormat": "misses/s" },
+        { "expr": "rate(zhibo_cache_hits_total[1m]) / (rate(zhibo_cache_hits_total[1m]) + rate(zhibo_cache_misses_total[1m]))", "legendFormat": "hit ratio" }
+      ],
+      "title": "快照缓存命中",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(zhibo_cache_write_attempts_total[1m])", "legendFormat": "attempts/s" },
+        { "expr": "rate(zhibo_cache_write_success_total[1m])", "legendFormat": "success/s" },
+        { "expr": "rate(zhibo_cache_write_failures_total[1m])", "legendFormat": "failures/s" },
+        { "expr": "rate(zhibo_cache_write_retries_total[1m])", "legendFormat": "retries/s" }
+      ],
+      "title": "缓存写穿（OnBid / Refresh）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "id": 8,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "zhibo_ws_connections", "legendFormat": "connections" },
+        { "expr": "zhibo_ws_rooms", "legendFormat": "rooms" }
+      ],
+      "title": "WebSocket 连接趋势",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["zhibo", "auction"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Zhibo 竞拍监控",
+  "uid": "zhibo-auction",
+  "version": 1
+}

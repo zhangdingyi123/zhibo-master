@@ -30,6 +30,22 @@ func (n *CompositeRoomNotifier) OnBidWithPrevWinner(ctx context.Context, result 
 	}
 }
 
+func (n *CompositeRoomNotifier) OnSettled(ctx context.Context, session *domain.AuctionSession, order *domain.Order) {
+	if session == nil {
+		return
+	}
+	if n.realtime != nil {
+		n.realtime.OnSettled(ctx, session, order)
+	}
+	if n.messages != nil && session.WinnerID != nil {
+		payload := map[string]any{
+			"sessionId": session.ID,
+			"roomId":    session.RoomID,
+		}
+		n.messages.FanOutOnSettled(ctx, *session, *session.WinnerID, order, payload)
+	}
+}
+
 func (n *CompositeRoomNotifier) OnCancelled(ctx context.Context, session *domain.AuctionSession, reason string) {
 	if n.realtime != nil {
 		n.realtime.OnCancelled(ctx, session, reason)

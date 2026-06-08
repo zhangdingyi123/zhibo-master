@@ -13,13 +13,34 @@ import (
 type AuctionService struct {
 	products *repository.ProductRepo
 	sessions *repository.SessionRepo
+	bids     *repository.BidRepo
 	orders   *OrderService
+	locker   SessionLocker
 	cache    RoomCache
 	notify   RoomNotifier
 }
 
-func NewAuctionService(products *repository.ProductRepo, sessions *repository.SessionRepo, orders *OrderService) *AuctionService {
-	return &AuctionService{products: products, sessions: sessions, orders: orders, notify: NoopRoomNotifier{}}
+func NewAuctionService(
+	products *repository.ProductRepo,
+	sessions *repository.SessionRepo,
+	bids *repository.BidRepo,
+	orders *OrderService,
+) *AuctionService {
+	return &AuctionService{
+		products: products,
+		sessions: sessions,
+		bids:     bids,
+		orders:   orders,
+		locker:   NoopLocker{},
+		notify:   NoopRoomNotifier{},
+	}
+}
+
+// SetSessionLocker 注入分布式锁（与出价路径共用）
+func (s *AuctionService) SetSessionLocker(l SessionLocker) {
+	if l != nil {
+		s.locker = l
+	}
 }
 
 // SetRoomNotifier 注入实时推送
@@ -162,7 +183,9 @@ func (s *AuctionService) Cancel(ctx context.Context, anchorID, sessionID uint64,
 	if err == nil {
 		if s.cache != nil {
 			_ = s.cache.Invalidate(ctx, session.RoomID, session.ID)
-			_ = s.cache.RefreshFromSession(ctx, session)
+			writeCacheWithRetry(ctx, "refresh_cancel", session.ID, session.RoomID, func() error {
+				return s.cache.RefreshFromSession(ctx, session)
+			})
 		}
 		if s.notify != nil {
 			s.notify.OnCancelled(ctx, session, reason)
@@ -171,37 +194,36 @@ func (s *AuctionService) Cancel(ctx context.Context, anchorID, sessionID uint64,
 	return session, err
 }
 
-// CompleteSettlement 场次成交并自动生成订单（规则引擎阶段 3 调用）
+// CompleteSettlement 场次成交并自动生成订单（封顶成交 / 到时落锤共用）
 func (s *AuctionService) CompleteSettlement(ctx context.Context, sessionID uint64, winnerID uint64, finalPrice int64) (*domain.Order, error) {
 	if winnerID == 0 {
 		return nil, domain.ErrSettlementNoWinner
 	}
 
-	session, err := s.sessions.GetByID(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
+	var order *domain.Order
+	err := s.locker.WithSessionLock(ctx, sessionID, func(lockCtx context.Context) error {
+		session, err := s.sessions.GetByID(lockCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		order, err = s.completeSettlementUnlocked(lockCtx, session, winnerID, finalPrice)
+		return err
+	})
+	return order, err
+}
 
-	// 已成交则返回已有订单
-	if session.Status == domain.SessionStatusSettled {
-		return s.orders.CreateFromSettledSession(ctx, session)
+func (s *AuctionService) afterSettled(ctx context.Context, session *domain.AuctionSession, order *domain.Order) {
+	if session == nil {
+		return
 	}
-
-	if err := session.TransitionTo(domain.SessionStatusSettled); err != nil {
-		return nil, err
+	if s.cache != nil {
+		writeCacheWithRetry(ctx, "refresh_settled", session.ID, session.RoomID, func() error {
+			return s.cache.RefreshFromSession(ctx, session)
+		})
 	}
-
-	if err := s.sessions.MarkSettled(ctx, sessionID, winnerID, finalPrice); err != nil {
-		return nil, err
+	if s.notify != nil {
+		s.notify.OnSettled(ctx, session, order)
 	}
-
-	_ = s.products.UpdateStatus(ctx, session.ProductID, session.AnchorID, domain.ProductStatusSold)
-
-	session, err = s.sessions.GetByID(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return s.orders.CreateFromSettledSession(ctx, session)
 }
 
 func sessionToProgress(s *domain.AuctionSession, order *domain.Order) *AuctionProgress {

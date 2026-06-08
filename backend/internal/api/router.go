@@ -50,7 +50,6 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	orderSvc := service.NewOrderService(orderRepo, productRepo, payTimeout)
 	go orderSvc.RunPayExpiryWorker(context.Background())
 	productSvc := service.NewProductService(productRepo, sessionRepo, orderRepo)
-	auctionSvc := service.NewAuctionService(productRepo, sessionRepo, orderSvc)
 	userAuctionSvc := service.NewUserAuctionService(sessionRepo, productRepo)
 	var bidLocker service.SessionLocker = service.NoopLocker{}
 	var roomCache service.RoomCache
@@ -61,6 +60,8 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		roomCache = service.NewRedisRoomCache(rdb, sessionRepo)
 		log.Printf("redis: connected %s (lock + room cache)", cfg.RedisAddr)
 	}
+	auctionSvc := service.NewAuctionService(productRepo, sessionRepo, bidRepo, orderSvc)
+	auctionSvc.SetSessionLocker(bidLocker)
 	bidSvc := service.NewBidService(db, sessionRepo, bidRepo, productRepo, orderRepo, bidLocker)
 	if roomCache != nil {
 		userAuctionSvc.SetRoomCache(roomCache)
@@ -77,9 +78,11 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	roomNotifier := service.NewCompositeRoomNotifier(wsNotifier, messageSvc)
 	bidSvc.SetRoomNotifier(roomNotifier)
 	auctionSvc.SetRoomNotifier(roomNotifier)
+	go auctionSvc.RunSettlementWorker(context.Background())
 
 	metricsH := handler.NewMetricsHandler(hub)
 	r.GET("/api/v1/metrics", metricsH.Get)
+	r.GET("/metrics", metricsH.Prometheus)
 
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	authH := handler.NewAuthHandler(authSvc)

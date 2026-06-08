@@ -1,0 +1,29 @@
+groups:
+  - name: zhibo
+    rules:
+      - alert: ZhiboCacheWriteFailures
+        expr: increase(zhibo_cache_write_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "竞拍缓存写穿失败"
+          description: "近 5 分钟出现 {{ $value }} 次缓存写失败（OnBid/Refresh），读路径将回源修复，请检查 Redis。"
+
+      - alert: ZhiboBidFailureRateHigh
+        expr: zhibo_bid_failure_rate > 0.5 and zhibo_bid_attempts_total > 20
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "出价失败率过高"
+          description: "当前出价失败率 {{ $value | humanizePercentage }}，请检查锁竞争或规则校验。"
+
+      - alert: ZhiboWSConnectionsZero
+        expr: zhibo_ws_connections == 0 and zhibo_ws_rooms == 0
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "无活跃 WebSocket 连接"
+          description: "10 分钟内 WS 连接与房间均为 0（可能无直播或网关异常）。"

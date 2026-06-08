@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: zhibo-api
+    metrics_path: /metrics
+    static_configs:
+      # 生产：与 docker-compose.prod.yml 同网，Prometheus 容器内直连 backend
+      - targets: ['zhibo-backend:8081']
+        labels:
+          service: zhibo-api
+          env: prod

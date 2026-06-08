@@ -134,6 +134,45 @@ func (r *SessionRepo) Cancel(ctx context.Context, sessionID, anchorID uint64, re
 	return nil
 }
 
+// ListExpiredRunning 倒计时已结束但仍为 running 的场次（到时落锤扫描）
+func (r *SessionRepo) ListExpiredRunning(ctx context.Context, now time.Time, limit int) ([]uint64, error) {
+	if limit < 1 {
+		limit = 50
+	}
+	const q = `SELECT id FROM auction_sessions
+		WHERE status = 'running' AND end_at IS NOT NULL AND end_at <= ?
+		ORDER BY end_at ASC
+		LIMIT ?`
+	rows, err := r.db.QueryContext(ctx, q, now, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list expired running sessions: %w", err)
+	}
+	defer rows.Close()
+	var ids []uint64
+	for rows.Next() {
+		var id uint64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *SessionRepo) MarkFailed(ctx context.Context, sessionID uint64, reason string) error {
+	const q = `UPDATE auction_sessions SET status = 'failed', cancel_reason = ?
+		WHERE id = ? AND status = 'running'`
+	res, err := r.db.ExecContext(ctx, q, reason, sessionID)
+	if err != nil {
+		return fmt.Errorf("mark session failed: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return domain.ErrInvalidStateTransition
+	}
+	return nil
+}
+
 func (r *SessionRepo) MarkSettled(ctx context.Context, sessionID uint64, winnerID uint64, finalPrice int64) error {
 	const q = `UPDATE auction_sessions SET
 		status = 'settled', winner_id = ?, current_price = ?, settled_at = NOW(3)

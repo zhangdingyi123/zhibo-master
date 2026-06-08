@@ -218,7 +218,9 @@ func (s *BidService) placeBidLocked(ctx context.Context, userID, sessionID uint6
 	result, err := s.buildBidResult(ctx, bid, session, order)
 	if err == nil {
 		if s.cache != nil {
-			_ = s.cache.OnBid(ctx, session, userID, bid.Amount, bid.Seq, !hadBid)
+			writeCacheWithRetry(ctx, "on_bid", session.ID, session.RoomID, func() error {
+				return s.cache.OnBid(ctx, session, userID, bid.Amount, bid.Seq, !hadBid)
+			})
 		}
 		if s.notify != nil {
 			if aware, ok := s.notify.(BidAwareNotifier); ok {

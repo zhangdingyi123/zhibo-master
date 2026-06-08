@@ -104,6 +104,14 @@ func (s *MessageService) FanOutOnBid(ctx context.Context, result *PlaceBidResult
 	}
 }
 
+// FanOutOnSettled 到时落锤 / 外部成交后写扩散
+func (s *MessageService) FanOutOnSettled(ctx context.Context, session domain.AuctionSession, winnerID uint64, order *domain.Order, base map[string]any) {
+	if s == nil {
+		return
+	}
+	s.fanOutSettled(ctx, session, winnerID, order, base)
+}
+
 // FanOutOnCancelled 取消场次写扩散
 func (s *MessageService) FanOutOnCancelled(ctx context.Context, session *domain.AuctionSession, reason string) {
 	if s == nil || session == nil {
