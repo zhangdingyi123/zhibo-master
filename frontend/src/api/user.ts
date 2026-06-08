@@ -1,7 +1,6 @@
 import type {
   AuctionRules,
   AuctionSession,
-  Order,
   OrderListItem,
   Paginated,
   Product,
