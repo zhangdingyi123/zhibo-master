@@ -194,6 +194,23 @@ curl http://127.0.0.1/api/v1/health
 | http://mgongchang.xyz | 跳转到主播端 `/admin` |
 | http://jj520.xyz/api/v1/health | API 健康检查 |
 
+### 监控可视化（Grafana）
+
+一键启动（**推荐走 80 端口 `/monitor/`，免开 3000**）：
+
+```bash
+cd /opt/zhibo
+bash scripts/observability-up.sh
+```
+
+| 地址 | 说明 |
+|------|------|
+| `http://<ECS公网IP>/monitor/` | Grafana（admin / zhibo） |
+| `http://<ECS公网IP>/monitor/d/zhibo-auction` | 竞拍监控大盘 |
+| `http://<ECS公网IP>/api/v1/metrics` | JSON 指标 |
+
+详见 [observability.md](./observability.md)。
+
 ---
 
 ## 七、MySQL 与 Redis 说明

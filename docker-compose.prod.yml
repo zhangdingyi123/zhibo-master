@@ -71,7 +71,45 @@ services:
     depends_on:
       - frontend
       - backend
+      - grafana
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: zhibo-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: zhibo-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: zhibo
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # 经 Nginx /monitor/ 反代访问（与 GRAFANA_ROOT_URL 一致，含末尾 /）
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://47.97.176.185/monitor/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
 
 volumes:
   mysql_data:
   redis_data:
+  prometheus_data:
+  grafana_data:
