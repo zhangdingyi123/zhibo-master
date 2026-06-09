@@ -91,6 +91,36 @@ stateDiagram-v2
 
 Go 实现：`backend/internal/domain/session_status.go` 中 `CanTransition` / `SessionStatus` 方法。
 
+### 2.1 订单状态机（履约 + 售后）
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending_pay: 成交生成
+    pending_pay --> paid: mock-pay
+    pending_pay --> cancelled: 买家/主播取消
+    pending_pay --> closed: 超时关单
+    paid --> shipped: 主播发货
+    paid --> refunded: 主播退款
+    shipped --> completed: 确认收货
+    shipped --> refunded: 主播退款
+    completed --> [*]
+    cancelled --> [*]
+    closed --> [*]
+    refunded --> [*]
+```
+
+| 状态 | 含义 | 典型场景 |
+|------|------|----------|
+| `pending_pay` | 待支付 | 正常成交；30 分钟内需支付 |
+| `paid` | 已支付待发货 | 买家填地址后主播可发货 |
+| `shipped` | 已发货 | 买家确认收货 |
+| `completed` | 已完成 | 终态 |
+| `cancelled` | 已取消 | 误拍协商；仅 `pending_pay` 可取消 |
+| `closed` | 超时关闭 | 系统关单 |
+| `refunded` | 已退款 | 主播对已支付/已发货订单模拟退款 |
+
+DDL 迁移：`006_order_fulfillment.sql`（履约字段）、`007_order_aftersale.sql`（售后字段）。
+
 ---
 
 ## 3. 规则字段建模

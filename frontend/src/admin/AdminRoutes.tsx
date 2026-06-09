@@ -13,6 +13,8 @@ import {
 import { ProductDetailPage } from './pages/ProductDetailPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProductListPage } from './pages/ProductListPage'
+import { LiveRoomListPage } from './pages/LiveRoomListPage'
+import { LiveRoomConsolePage } from './pages/LiveRoomConsolePage'
 
 export function AdminRoutes() {
   return (
@@ -32,6 +34,8 @@ export function AdminRoutes() {
         <Route path="products/:id" element={<ProductDetailPage />} />
         <Route path="products/:id/edit" element={<ProductEditPage />} />
         <Route path="products/:id/auction" element={<AuctionPublishPage />} />
+        <Route path="live-rooms" element={<LiveRoomListPage />} />
+        <Route path="live-rooms/:id" element={<LiveRoomConsolePage />} />
         <Route path="orders" element={<OrderListPage />} />
         <Route path="orders/:id" element={<OrderDetailPage />} />
       </Route>

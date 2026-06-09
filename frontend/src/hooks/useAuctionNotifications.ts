@@ -6,6 +6,7 @@ import {
   EventBidNew,
   EventCountdownTick,
   EventRankUpdate,
+  EventSessionSwitch,
   type BidNewPayload,
   type RankEntry,
   type RoomEvent,
@@ -26,6 +27,8 @@ type Options = {
   rank: RankEntry[]
   lastEvent: RoomEvent | null
   soundEnabled?: boolean
+  /** 连播房间：成交不跳页，提示更轻 */
+  multiSku?: boolean
   /** 成交后回调（含订单 id） */
   onSettled?: (payload: SettledPayload) => void
 }
@@ -53,6 +56,7 @@ export function useAuctionNotifications({
   rank,
   lastEvent,
   soundEnabled = true,
+  multiSku = false,
   onSettled,
 }: Options) {
   const [toasts, setToasts] = useState<AuctionToast[]>([])
@@ -163,17 +167,27 @@ export function useAuctionNotifications({
         const p = payload as SettledPayload | undefined
         const winnerId = p?.session?.winnerId ?? p?.snapshot?.winnerId
         const isWinner = currentUserId != null && winnerId === currentUserId
-        push(
-          {
-            kind: isWinner ? 'success' : 'info',
-            title: '竞拍结束',
-            message: isWinner ? '恭喜您中标！' : '本场竞拍已成交',
-          },
-          isWinner ? 'success' : 'info',
-        )
+        if (multiSku) {
+          // 连播：非中标者不弹 Toast，中标者由底部支付条承接
+          if (isWinner) {
+            playTone('success', soundEnabled)
+          }
+        } else {
+          push(
+            {
+              kind: isWinner ? 'success' : 'info',
+              title: '竞拍结束',
+              message: isWinner ? '恭喜您中标！' : '本场竞拍已成交',
+            },
+            isWinner ? 'success' : 'info',
+          )
+        }
         if (p) onSettled?.(p)
         break
       }
+      case EventSessionSwitch:
+        // 连播切品引导由 NextUpBanner 承接，避免 Toast 叠层
+        break
       case EventAuctionCancelled:
         push(
           {
@@ -188,7 +202,7 @@ export function useAuctionNotifications({
       default:
         break
     }
-  }, [lastEvent, currentUserId, push, onSettled])
+  }, [lastEvent, currentUserId, multiSku, push, onSettled])
 
   return { toasts, dismiss, outbidFlash }
 }

@@ -7,6 +7,7 @@ import { SESSION_STATUS_LABEL } from '../../admin/labels'
 import { auctionEntryPath } from '../../utils/auctionNav'
 import { useCountdown } from '../../hooks/useCountdown'
 import { formatCents } from '../../utils/money'
+import { ScheduledStartBanner } from '../../components/auction/ScheduledStartBanner'
 import { formatRemainingMs } from '../../utils/time'
 
 function DetailCountdown({ endAt, running }: { endAt?: string; running: boolean }) {
@@ -90,6 +91,10 @@ export function AuctionDetailPage() {
         <p className="page-desc detail-desc">{product.description}</p>
 
         <DetailCountdown endAt={session.endAt} running={isRunning} />
+
+        {session.status === 'pending' && session.scheduledStartAt && (
+          <ScheduledStartBanner scheduledStartAt={session.scheduledStartAt} />
+        )}
 
         <div className="snapshot-strip snapshot-strip--rich">
           <div className="snapshot-strip__item">

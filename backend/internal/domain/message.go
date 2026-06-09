@@ -18,6 +18,9 @@ const (
 	MessageSettledWin  MessageEventType = "settled_win"
 	MessageSettled     MessageEventType = "settled"
 	MessageCancelled   MessageEventType = "cancelled"
+	MessageOrderShipped   MessageEventType = "order_shipped"
+	MessageOrderCancelled MessageEventType = "order_cancelled"
+	MessageOrderRefunded  MessageEventType = "order_refunded"
 )
 
 type UserMessage struct {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { AuctionRules } from '../../api/types'
 import { centsToYuanInput, yuanInputToCents } from '../../utils/money'
+import { AUCTION_RULE_TEMPLATES } from '../auctionRuleTemplates'
 
 export interface AuctionRulesFormValues {
   startingPrice: number
@@ -56,6 +57,25 @@ export function AuctionRulesForm({
   const [scheduled, setScheduled] = useState(toLocalDatetime(initial?.scheduledStartAt))
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null)
+
+  function applyTemplate(templateId: string) {
+    const tpl = AUCTION_RULE_TEMPLATES.find((t) => t.id === templateId)
+    if (!tpl) return
+    setActiveTemplate(templateId)
+    setStartingYuan(centsToYuanInput(tpl.values.startingPrice))
+    setIncrementYuan(centsToYuanInput(tpl.values.bidIncrement))
+    if (tpl.values.capPrice == null) {
+      setNoCap(true)
+      setCapYuan('')
+    } else {
+      setNoCap(false)
+      setCapYuan(centsToYuanInput(tpl.values.capPrice))
+    }
+    setDurationSec(String(tpl.values.durationSec))
+    setExtendThreshold(String(tpl.values.extendThresholdSec))
+    setExtendSec(String(tpl.values.extendSec))
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -114,6 +134,22 @@ export function AuctionRulesForm({
 
   return (
     <form className="admin-form" onSubmit={handleSubmit}>
+      <div className="rule-templates">
+        <span className="rule-templates__label">场次模板</span>
+        <div className="rule-templates__list">
+          {AUCTION_RULE_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.id}
+              type="button"
+              className={`rule-template-chip${activeTemplate === tpl.id ? ' rule-template-chip--active' : ''}`}
+              title={tpl.description}
+              onClick={() => applyTemplate(tpl.id)}
+            >
+              {tpl.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="admin-form__grid">
         <label>
           起拍价（元）

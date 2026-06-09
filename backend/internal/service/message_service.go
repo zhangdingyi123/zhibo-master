@@ -181,6 +181,91 @@ func (s *MessageService) fanOutSettled(ctx context.Context, session domain.Aucti
 	}
 }
 
+func (s *MessageService) fanOutOrderToBuyer(ctx context.Context, order *domain.Order, event domain.MessageEventType, title, body string, dedupe string) {
+	if s == nil || order == nil {
+		return
+	}
+	payload := map[string]any{
+		"orderId":   order.ID,
+		"sessionId": order.SessionID,
+		"amount":    order.Amount,
+	}
+	if order.CancelReason != "" {
+		payload["reason"] = order.CancelReason
+	}
+	_ = s.messages.Insert(ctx, repository.InsertMessageInput{
+		UserID:    order.BuyerID,
+		EventType: event,
+		Category:  domain.MessageCategoryOrder,
+		Title:     title,
+		Body:      body,
+		Payload:   payload,
+		DedupeKey: dedupe,
+	})
+}
+
+// FanOutOnOrderCancelled 待支付订单取消后通知买家
+func (s *MessageService) FanOutOnOrderCancelled(ctx context.Context, order *domain.Order, productName string) {
+	if s == nil || order == nil {
+		return
+	}
+	body := order.CancelReason
+	if productName != "" {
+		body = fmt.Sprintf("「%s」%s", productName, body)
+	}
+	if body == "" {
+		body = "订单已取消"
+	}
+	s.fanOutOrderToBuyer(ctx, order, domain.MessageOrderCancelled, "订单已取消", body,
+		fmt.Sprintf("cancelled:%d", order.ID))
+}
+
+// FanOutOnOrderRefunded 模拟退款后通知买家
+func (s *MessageService) FanOutOnOrderRefunded(ctx context.Context, order *domain.Order, productName string) {
+	if s == nil || order == nil {
+		return
+	}
+	body := "演示环境已模拟原路退款"
+	if order.CancelReason != "" {
+		body = order.CancelReason + "。" + body
+	}
+	if productName != "" {
+		body = fmt.Sprintf("「%s」%s", productName, body)
+	}
+	s.fanOutOrderToBuyer(ctx, order, domain.MessageOrderRefunded, "订单已退款", body,
+		fmt.Sprintf("refunded:%d", order.ID))
+}
+
+// FanOutOnShipped 主播发货后通知买家
+func (s *MessageService) FanOutOnShipped(ctx context.Context, order *domain.Order, productName string) {
+	if s == nil || order == nil {
+		return
+	}
+	body := "您的订单已发货，请注意查收"
+	if order.TrackingNo != "" {
+		body = fmt.Sprintf("物流单号：%s", order.TrackingNo)
+	}
+	if productName != "" {
+		body = fmt.Sprintf("「%s」%s", productName, body)
+	}
+	payload := map[string]any{
+		"orderId":   order.ID,
+		"sessionId": order.SessionID,
+	}
+	if order.TrackingNo != "" {
+		payload["trackingNo"] = order.TrackingNo
+	}
+	_ = s.messages.Insert(ctx, repository.InsertMessageInput{
+		UserID:    order.BuyerID,
+		EventType: domain.MessageOrderShipped,
+		Category:  domain.MessageCategoryOrder,
+		Title:     "订单已发货",
+		Body:      body,
+		Payload:   payload,
+		DedupeKey: fmt.Sprintf("shipped:%d", order.ID),
+	})
+}
+
 func (s *MessageService) fanOutExcept(ctx context.Context, sessionID, except uint64, event domain.MessageEventType, title, body, dedupe string, payload map[string]any) {
 	participants, err := s.bids.ListParticipantUserIDs(ctx, sessionID)
 	if err != nil {

@@ -8,6 +8,7 @@ import {
   EventBidNew,
   EventCountdownTick,
   EventRankUpdate,
+  EventSessionSwitch,
   ServerConnected,
   ServerError,
   ServerEvent,
@@ -22,6 +23,7 @@ import {
   type RankUpdatePayload,
   type RoomEvent,
   type SessionSnapshot,
+  type SessionSwitchPayload,
   type SyncPayload,
   type WsErrorPayload,
 } from './types'
@@ -379,6 +381,15 @@ export class AuctionSocket {
       case EventAuctionCancelled: {
         const p = ev.payload as { snapshot?: SessionSnapshot } | undefined
         if (p?.snapshot) this.applySnapshot(p.snapshot)
+        break
+      }
+      case EventSessionSwitch: {
+        const p = parsePayload<SessionSwitchPayload>(ev.payload)
+        if (p?.current?.snapshot) {
+          this.applySnapshot(p.current.snapshot)
+          this.rank = []
+          this.callbacks.onRank?.([])
+        }
         break
       }
       default:

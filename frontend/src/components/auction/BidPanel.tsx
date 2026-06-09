@@ -13,6 +13,8 @@ type Props = {
   /** 被超越时突出「按最低加价」按钮 */
   showCatchUp?: boolean
   loginReturnTo?: string
+  /** 连播房间：本件结束后保持轻提示，等待切品 */
+  multiSku?: boolean
   onBid: (amountCents: number) => void
 }
 
@@ -25,6 +27,7 @@ export function BidPanel({
   error,
   showCatchUp = false,
   loginReturnTo = '/app',
+  multiSku = false,
   onBid,
 }: Props) {
   const minNext = snapshot?.minNextBid ?? 0
@@ -101,6 +104,16 @@ export function BidPanel({
   if (!snapshot) return null
 
   if (snapshot.status === 'settled') {
+    if (multiSku) {
+      return (
+        <section className="bid-panel bid-panel--ended bid-panel--multi-wait">
+          <p>本件已拍完</p>
+          <span className="muted">
+            成交价 {formatCents(snapshot.currentPrice)} · 点击底部商品可回看 · 下一件马上开始
+          </span>
+        </section>
+      )
+    }
     return (
       <section className="bid-panel bid-panel--ended">
         <p>竞拍已结束</p>

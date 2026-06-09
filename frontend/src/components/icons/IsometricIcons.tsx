@@ -82,6 +82,16 @@ export function IsoInboxIcon({ className }: IconProps) {
   )
 }
 
+export function IsoPackageIcon({ className }: IconProps) {
+  return (
+    <IsoBase className={className}>
+      <path d="M10 20l14-8 14 8v14l-14 8-14-8V20z" fill="currentColor" opacity="0.22" />
+      <path d="M10 20l14-8 14 8M10 20v14l14 8 14-8V20" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M24 12v28" stroke="currentColor" strokeWidth="1.5" />
+    </IsoBase>
+  )
+}
+
 export function messageEventIcon(eventType: string) {
   switch (eventType) {
     case 'outbid':
@@ -94,6 +104,12 @@ export function messageEventIcon(eventType: string) {
       return IsoBellIcon
     case 'cancelled':
       return IsoAlertIcon
+    case 'order_shipped':
+      return IsoPackageIcon
+    case 'order_cancelled':
+      return IsoAlertIcon
+    case 'order_refunded':
+      return IsoClockIcon
     default:
       return IsoInboxIcon
   }

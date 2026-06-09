@@ -4,11 +4,13 @@ import "time"
 
 // AuctionSession 竞拍场次
 type AuctionSession struct {
-	ID        uint64        `json:"id"`
-	ProductID uint64        `json:"productId"`
-	AnchorID  uint64        `json:"anchorId"`
-	RoomID    string        `json:"roomId"`
-	Status    SessionStatus `json:"status"`
+	ID         uint64        `json:"id"`
+	ProductID  uint64        `json:"productId"`
+	AnchorID   uint64        `json:"anchorId"`
+	LiveRoomID *uint64       `json:"liveRoomId,omitempty"`
+	SeqInRoom  uint32        `json:"seqInRoom"`
+	RoomID     string        `json:"roomId"`
+	Status     SessionStatus `json:"status"`
 
 	Rules AuctionRules `json:"rules"`
 

@@ -37,6 +37,9 @@ sequenceDiagram
 | 成交-中标 | 胜者 | `settled_win` | `settled_win:{sessionId}` |
 | 成交-未中 | 其他参与者 | `settled` | `settled:{sessionId}:{userId}` |
 | 取消场次 | 所有参与者 | `cancelled` | `cancelled:{sessionId}` |
+| 订单取消 | 买家 | `order_cancelled` | `cancelled:{orderId}` |
+| 订单退款 | 买家 | `order_refunded` | `refunded:{orderId}` |
+| 订单发货 | 买家 | `order_shipped` | `shipped:{orderId}` |
 
 参与者列表来自 `bids` 表 `DISTINCT user_id`；领先者快照在出价事务内 `GetWinningUserIDTx` 获取。
 

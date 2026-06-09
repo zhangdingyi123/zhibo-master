@@ -122,6 +122,10 @@ export function DashboardPage() {
           </section>
 
           <div className="dash-quick">
+            <Link to="/admin/live-rooms" className="dash-quick__card">
+              <span className="dash-quick__title">直播连拍</span>
+              <span className="muted">一场直播多个 SKU 连续上拍</span>
+            </Link>
             <Link to="/admin/products" className="dash-quick__card">
               <span className="dash-quick__title">商品管理</span>
               <span className="muted">上架、编辑、发布竞拍</span>

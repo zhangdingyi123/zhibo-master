@@ -53,13 +53,22 @@ run_file_if_needed \
   "backend/migrations/005_order_pay_expire.sql" \
   "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='orders' AND COLUMN_NAME='pay_expire_at'"
 
+run_file_if_needed \
+  "backend/migrations/006_order_fulfillment.sql" \
+  "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='orders' AND COLUMN_NAME='receiver_name'"
+
+run_file_if_needed \
+  "backend/migrations/007_order_aftersale.sql" \
+  "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='orders' AND COLUMN_NAME='cancel_reason'"
+
 echo ""
 echo "==> 迁移校验"
 mysql_exec -e "
   SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_COMMENT
   FROM information_schema.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'pay_expire_at';
-  SELECT id, order_no, status, pay_expire_at, created_at
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders'
+    AND COLUMN_NAME IN ('pay_expire_at', 'receiver_name', 'shipped_at', 'completed_at', 'cancel_reason', 'refunded_at');
+  SELECT id, order_no, status, pay_expire_at, receiver_name, shipped_at, completed_at, created_at
   FROM orders
   ORDER BY id DESC
   LIMIT 5;

@@ -12,7 +12,16 @@ export type SessionStatus =
   | 'cancelled'
   | 'failed'
 
-export type OrderStatus = 'pending_pay' | 'paid' | 'cancelled' | 'closed'
+export type OrderStatus =
+  | 'pending_pay'
+  | 'paid'
+  | 'shipped'
+  | 'completed'
+  | 'cancelled'
+  | 'closed'
+  | 'refunded'
+
+export type OrderActor = 'buyer' | 'seller' | 'system'
 
 export interface AuctionRules {
   startingPrice: number
@@ -55,10 +64,62 @@ export interface ProductView extends Product {
   auction?: AuctionProgress
 }
 
+export type LiveRoomStatus = 'idle' | 'live' | 'ended'
+
+export interface LiveRoom {
+  id: number
+  anchorId: number
+  title: string
+  roomId: string
+  status: LiveRoomStatus
+  currentSessionId?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LiveRoomSessionItem {
+  session: AuctionSession
+  product: {
+    id: number
+    name: string
+    description: string
+    coverUrl: string
+  }
+}
+
+export interface LiveRoomFunnel {
+  viewerCount: number
+  bidderCount: number
+  settledCount: number
+  paidCount: number
+  hint?: string
+}
+
+export interface LiveRoomDetail {
+  liveRoom: LiveRoom
+  currentSession?: LiveRoomSessionItem
+  queue: LiveRoomSessionItem[]
+  history: LiveRoomSessionItem[]
+  funnel: LiveRoomFunnel
+}
+
+export interface SessionSummary {
+  sessionId: number
+  productId: number
+  productName: string
+  coverUrl: string
+  status: SessionStatus
+  finalPrice: number
+  winnerId?: number
+  seqInRoom: number
+}
+
 export interface AuctionSession {
   id: number
   productId: number
   anchorId: number
+  liveRoomId?: number
+  seqInRoom?: number
   roomId: string
   status: SessionStatus
   rules: AuctionRules
@@ -86,8 +147,28 @@ export interface Order {
   status: OrderStatus
   payExpireAt?: string
   paidAt?: string
+  receiverName?: string
+  receiverPhone?: string
+  receiverAddress?: string
+  trackingNo?: string
+  shippedAt?: string
+  completedAt?: string
+  cancelReason?: string
+  cancelledBy?: OrderActor
+  cancelledAt?: string
+  refundedAt?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface AftersaleBody {
+  reason: string
+}
+
+export interface ShippingAddressBody {
+  receiverName: string
+  receiverPhone: string
+  receiverAddress: string
 }
 
 export interface OrderListItem {

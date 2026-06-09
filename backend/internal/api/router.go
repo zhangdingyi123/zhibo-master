@@ -62,22 +62,28 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	}
 	auctionSvc := service.NewAuctionService(productRepo, sessionRepo, bidRepo, orderSvc)
 	auctionSvc.SetSessionLocker(bidLocker)
+	liveRoomRepo := repository.NewLiveRoomRepo(db)
+	liveRoomSvc := service.NewLiveRoomService(liveRoomRepo, sessionRepo, productRepo, orderRepo, auctionSvc)
 	bidSvc := service.NewBidService(db, sessionRepo, bidRepo, productRepo, orderRepo, bidLocker)
 	if roomCache != nil {
 		userAuctionSvc.SetRoomCache(roomCache)
 		bidSvc.SetRoomCache(roomCache)
 		auctionSvc.SetRoomCache(roomCache)
+		liveRoomSvc.SetRoomCache(roomCache)
 	}
 
 	hub := ws.NewHub(sessionRepo, bidRepo, userAuctionSvc, bidSvc)
+	liveRoomSvc.SetRoomViewerCounter(hub)
 	wsNotifier := ws.NewNotifier(hub, bidRepo)
 	if roomCache != nil {
 		wsNotifier.SetRoomCache(roomCache)
 	}
 	messageSvc := service.NewMessageService(messageRepo, bidRepo)
+	orderSvc.SetMessageService(messageSvc)
 	roomNotifier := service.NewCompositeRoomNotifier(wsNotifier, messageSvc)
 	bidSvc.SetRoomNotifier(roomNotifier)
 	auctionSvc.SetRoomNotifier(roomNotifier)
+	liveRoomSvc.SetRoomNotifier(roomNotifier)
 	go auctionSvc.RunSettlementWorker(context.Background())
 
 	metricsH := handler.NewMetricsHandler(hub)
@@ -90,6 +96,10 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	wsH := ws.NewHandler(hub, userRepo, cfg.JWTSecret)
 	r.GET("/api/v1/ws", wsH.ServeWS)
 
+	aiSvc := service.NewAIService(cfg)
+	ttsSvc := service.NewTTSService(cfg)
+	aiH := handler.NewAIHandler(aiSvc, ttsSvc)
+
 	productH := handler.NewProductHandler(productSvc)
 	auctionH := handler.NewAuctionHandler(auctionSvc)
 	orderH := handler.NewOrderHandler(orderSvc)
@@ -97,6 +107,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	userOrderH := handler.NewUserOrderHandler(orderSvc)
 	messageH := handler.NewMessageHandler(messageSvc)
 	streamH := handler.NewStreamHandler(cfg)
+	liveRoomH := handler.NewLiveRoomHandler(liveRoomSvc)
 
 	v1 := r.Group("/api/v1")
 	{
@@ -114,8 +125,10 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		user.GET("/auctions", userAuctionH.List)
 		user.GET("/auctions/:sessionId", userAuctionH.Get)
 		user.GET("/auctions/:sessionId/snapshot", userAuctionH.Snapshot)
+		user.GET("/rooms/:roomId", liveRoomH.GetByRoom)
 		user.GET("/rooms/:roomId/snapshot", userAuctionH.SnapshotByRoom)
 		user.GET("/streams/:roomId", streamH.GetByRoom)
+		user.POST("/tts", aiH.SynthesizeSpeech)
 
 		user.POST("/auctions/:sessionId/bids", middleware.RequireAuth(userRepo, cfg.JWTSecret), userAuctionH.PlaceBid)
 
@@ -126,6 +139,9 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 			userAuth.GET("/orders/:id", userOrderH.Get)
 			userAuth.GET("/auctions/:sessionId/order", userOrderH.GetBySession)
 			userAuth.POST("/orders/:id/mock-pay", userOrderH.MockPay)
+			userAuth.PUT("/orders/:id/shipping-address", userOrderH.SubmitShippingAddress)
+			userAuth.POST("/orders/:id/confirm-receive", userOrderH.ConfirmReceive)
+			userAuth.POST("/orders/:id/cancel", userOrderH.Cancel)
 
 			userAuth.GET("/messages", messageH.List)
 			userAuth.GET("/messages/unread-count", messageH.UnreadCount)
@@ -137,6 +153,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	admin := v1.Group("/admin")
 	admin.Use(middleware.RequireAuth(userRepo, cfg.JWTSecret), middleware.RequireAnchor())
 	{
+		admin.POST("/products/ai-intro", aiH.GenerateProductIntro)
 		admin.POST("/products", productH.Create)
 		admin.GET("/products", productH.List)
 		admin.GET("/products/:id", productH.Get)
@@ -148,8 +165,19 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		admin.PUT("/auctions/:sessionId/rules", auctionH.UpdateRules)
 		admin.POST("/auctions/:sessionId/cancel", auctionH.Cancel)
 
+		admin.POST("/live-rooms", liveRoomH.Create)
+		admin.GET("/live-rooms", liveRoomH.List)
+		admin.GET("/live-rooms/:id", liveRoomH.Get)
+		admin.POST("/live-rooms/:id/start", liveRoomH.Start)
+		admin.POST("/live-rooms/:id/end", liveRoomH.End)
+		admin.POST("/live-rooms/:id/sessions", liveRoomH.AddSession)
+		admin.POST("/live-rooms/:id/end-current", liveRoomH.EndCurrentAndSwitch)
+
 		admin.GET("/orders", orderH.List)
 		admin.GET("/orders/:id", orderH.Get)
+		admin.POST("/orders/:id/ship", orderH.Ship)
+		admin.POST("/orders/:id/cancel", orderH.Cancel)
+		admin.POST("/orders/:id/refund", orderH.Refund)
 	}
 
 	return r

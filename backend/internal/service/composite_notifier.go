@@ -54,3 +54,15 @@ func (n *CompositeRoomNotifier) OnCancelled(ctx context.Context, session *domain
 		n.messages.FanOutOnCancelled(ctx, session, reason)
 	}
 }
+
+func (n *CompositeRoomNotifier) OnSessionSwitch(
+	ctx context.Context,
+	liveRoom *domain.LiveRoom,
+	previous *SessionSummary,
+	current *UserAuctionDetail,
+	history []SessionSummary,
+) {
+	if n.realtime != nil {
+		n.realtime.OnSessionSwitch(ctx, liveRoom, previous, current, history)
+	}
+}

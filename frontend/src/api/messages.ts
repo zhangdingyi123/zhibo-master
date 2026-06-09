@@ -6,6 +6,9 @@ export type MessageEventType =
   | 'settled_win'
   | 'settled'
   | 'cancelled'
+  | 'order_shipped'
+  | 'order_cancelled'
+  | 'order_refunded'
 
 export type MessageCategory = 'auction' | 'order' | 'system'
 

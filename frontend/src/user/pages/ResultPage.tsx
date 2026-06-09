@@ -85,8 +85,18 @@ export function ResultPage() {
             >
               去支付 {formatCents(order.amount)}
             </button>
+          ) : order.status === 'paid' || order.status === 'shipped' ? (
+            <button
+              type="button"
+              className="btn-primary btn-block"
+              onClick={() => navigate(`/app/orders/${order.id}`)}
+            >
+              {order.status === 'paid' ? '填写收货地址' : '查看物流 / 确认收货'}
+            </button>
           ) : (
-            <p className="form-info">订单已支付</p>
+            <p className="form-info">
+              {order.status === 'completed' ? '交易已完成' : '订单已支付'}
+            </p>
           )}
         </div>
       )}

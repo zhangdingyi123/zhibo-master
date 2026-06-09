@@ -5,7 +5,9 @@ import type {
   RankEntry,
   RoomEvent,
   SessionSnapshot,
+  SessionSwitchPayload,
 } from './types'
+import { EventSessionSwitch } from './types'
 import { WsClientError } from './types'
 
 export type UseAuctionSocketOptions = Omit<
@@ -14,6 +16,7 @@ export type UseAuctionSocketOptions = Omit<
 > & {
   /** 为 false 时不自动 connect（默认 true） */
   enabled?: boolean
+  onSessionSwitch?: (payload: SessionSwitchPayload) => void
 }
 
 export type UseAuctionSocketResult = {
@@ -34,7 +37,15 @@ export type UseAuctionSocketResult = {
 export function useAuctionSocket(
   options: UseAuctionSocketOptions,
 ): UseAuctionSocketResult {
-  const { enabled = true, roomId, openId, userId, token, ...rest } = options
+  const {
+    enabled = true,
+    roomId,
+    openId,
+    userId,
+    token,
+    onSessionSwitch,
+    ...rest
+  } = options
 
   const [connectionState, setConnectionState] =
     useState<ConnectionState>('idle')
@@ -72,6 +83,9 @@ export function useAuctionSocket(
         if (ev.type === 'bid.new') {
           setIsBidding(false)
         }
+        if (ev.type === EventSessionSwitch) {
+          onSessionSwitch?.(ev.payload as SessionSwitchPayload)
+        }
       },
       onError: (err) => {
         setIsBidding(false)
@@ -86,7 +100,7 @@ export function useAuctionSocket(
       socket.disconnect()
       socketRef.current = null
     }
-  }, [enabled, roomId, openId, userId, token])
+  }, [enabled, roomId, openId, userId, token, onSessionSwitch])
 
   const bid = useCallback(
     (amount: number, requestId?: string) => {

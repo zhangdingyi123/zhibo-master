@@ -65,18 +65,39 @@ func mapError(err error) (httpStatus, code int, message string) {
 		return http.StatusConflict, 40900, err.Error()
 	case errors.Is(err, domain.ErrCancelReasonRequired),
 		errors.Is(err, domain.ErrSettlementNoWinner),
-		errors.Is(err, domain.ErrRequestIDRequired):
+		errors.Is(err, domain.ErrRequestIDRequired),
+		errors.Is(err, domain.ErrShippingAddressRequired):
 		return http.StatusBadRequest, 40000, err.Error()
+	case errors.Is(err, domain.ErrOrderNotCancellable),
+		errors.Is(err, domain.ErrOrderNotRefundable),
+		errors.Is(err, domain.ErrOrderAddressMissing):
+		return http.StatusConflict, 40900, err.Error()
 	case errors.Is(err, domain.ErrBidTooLow),
 		errors.Is(err, domain.ErrBidExceedsCap),
 		errors.Is(err, domain.ErrAuctionEnded):
 		return http.StatusBadRequest, 40001, err.Error()
 	case errors.Is(err, domain.ErrSessionNotBiddable),
-		errors.Is(err, domain.ErrAuctionNotVisible):
+		errors.Is(err, domain.ErrAuctionNotVisible),
+		errors.Is(err, domain.ErrLiveRoomNotLive),
+		errors.Is(err, domain.ErrLiveRoomNoCurrent),
+		errors.Is(err, domain.ErrLiveRoomNoNextSession),
+		errors.Is(err, domain.ErrLiveRoomSessionBusy):
 		return http.StatusConflict, 40900, err.Error()
+	case errors.Is(err, domain.ErrLiveRoomTitleRequired):
+		return http.StatusBadRequest, 40000, err.Error()
+	case errors.Is(err, domain.ErrLiveRoomNotFound):
+		return http.StatusNotFound, 40400, err.Error()
 	case errors.Is(err, domain.ErrVersionConflict),
 		errors.Is(err, domain.ErrSessionLockBusy):
 		return http.StatusConflict, 40901, err.Error()
+	case errors.Is(err, domain.ErrAIServiceUnavailable),
+		errors.Is(err, domain.ErrTTSServiceUnavailable):
+		return http.StatusServiceUnavailable, 50300, err.Error()
+	case errors.Is(err, domain.ErrAIGenerationFailed),
+		errors.Is(err, domain.ErrTTSSynthesisFailed):
+		return http.StatusBadGateway, 50200, err.Error()
+	case errors.Is(err, domain.ErrTTSInputRequired):
+		return http.StatusBadRequest, 40000, err.Error()
 	default:
 		return http.StatusInternalServerError, 50000, "服务器内部错误"
 	}

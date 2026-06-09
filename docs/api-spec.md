@@ -150,6 +150,19 @@
 |------|------|------|
 | GET | `/api/v1/admin/orders` | 订单列表，`?page=1&status=paid` |
 | GET | `/api/v1/admin/orders/:id` | 订单详情 |
+| POST | `/api/v1/admin/orders/:id/ship` | 发货（`paid` → `shipped`，需买家已填地址；body 可选 `trackingNo`） |
+| POST | `/api/v1/admin/orders/:id/cancel` | 取消待支付订单（`pending_pay` → `cancelled`；body: `{ "reason": "误拍协商取消" }`） |
+| POST | `/api/v1/admin/orders/:id/refund` | 模拟退款（`paid`/`shipped` → `refunded`；body: `{ "reason": "缺货无法履约" }`） |
+
+**售后状态说明**：
+
+| 状态 | 触发方 | 前置状态 |
+|------|--------|----------|
+| `cancelled` | 买家 / 主播 | `pending_pay` |
+| `refunded` | 主播 | `paid` / `shipped` |
+| `closed` | 系统 | `pending_pay`（超时未支付） |
+
+取消 / 退款均写入 `cancel_reason`、`cancelled_by`；退款另写 `refunded_at`。买家会收到 `order_cancelled` / `order_refunded` 站内消息。
 
 成交后由规则引擎判定封顶/到时成交，`BidService` 在事务内落库并生成订单。
 
@@ -275,7 +288,30 @@
 | GET | `/api/v1/orders/:id` | 订单详情 + 商品摘要（仅买家本人） |
 | GET | `/api/v1/auctions/:sessionId/order` | 按场次查本人订单 + 商品摘要 |
 | POST | `/api/v1/orders/:id/mock-pay` | 模拟支付（`pending_pay` → `paid`，超时返回 409） |
+| PUT | `/api/v1/orders/:id/shipping-address` | 填写收货地址（`paid` 状态，body: `receiverName/Phone/Address`） |
+| POST | `/api/v1/orders/:id/confirm-receive` | 确认收货（`shipped` → `completed`） |
+| POST | `/api/v1/orders/:id/cancel` | 买家取消待支付（`pending_pay` → `cancelled`；body: `{ "reason": "误拍/拍错" }`） |
 
 订单创建时写入 `payExpireAt`（默认创建后 30 分钟，环境变量 `PAY_TIMEOUT_MINUTES`）；超时未支付由后台任务自动 `closed`。
+
+**履约与售后状态机**：
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending_pay: 成交生成
+    pending_pay --> paid: mock-pay
+    pending_pay --> cancelled: 买家/主播取消
+    pending_pay --> closed: 超时关单
+    paid --> shipped: 主播发货
+    paid --> refunded: 主播退款
+    shipped --> completed: 确认收货
+    shipped --> refunded: 主播退款
+    completed --> [*]
+    cancelled --> [*]
+    closed --> [*]
+    refunded --> [*]
+```
+
+正常履约：`pending_pay` → `paid` → `shipped` → `completed`（主播发货见管理端）。已支付误拍 / 缺货等异常由主播在管理端发起退款（`paid`/`shipped` → `refunded`）。
 
 历史竞拍：使用 `GET /api/v1/auctions?status=settled`（2.10 列表能力）。

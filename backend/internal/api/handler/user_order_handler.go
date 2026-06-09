@@ -84,3 +84,58 @@ func (h *UserOrderHandler) MockPay(c *gin.Context) {
 	}
 	response.OK(c, o)
 }
+
+func (h *UserOrderHandler) SubmitShippingAddress(c *gin.Context) {
+	user := currentUser(c)
+	id, err := parseID(c.Param("id"))
+	if err != nil {
+		response.Fail(c, domain.ErrNotFound)
+		return
+	}
+	var body service.ShippingAddressInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, domain.ErrShippingAddressRequired)
+		return
+	}
+	o, err := h.orders.SubmitShippingAddress(c.Request.Context(), user.ID, id, body)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, o)
+}
+
+func (h *UserOrderHandler) ConfirmReceive(c *gin.Context) {
+	user := currentUser(c)
+	id, err := parseID(c.Param("id"))
+	if err != nil {
+		response.Fail(c, domain.ErrNotFound)
+		return
+	}
+	o, err := h.orders.ConfirmReceive(c.Request.Context(), user.ID, id)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, o)
+}
+
+func (h *UserOrderHandler) Cancel(c *gin.Context) {
+	user := currentUser(c)
+	id, err := parseID(c.Param("id"))
+	if err != nil {
+		response.Fail(c, domain.ErrNotFound)
+		return
+	}
+	var body service.AftersaleInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, domain.ErrCancelReasonRequired)
+		return
+	}
+	o, err := h.orders.CancelPendingByBuyer(c.Request.Context(), user.ID, id, body)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, o)
+}

@@ -80,6 +80,17 @@ export function MyOrdersPage() {
                 {order.status === 'pending_pay' && (
                   <span className="order-row__pay-hint">去支付</span>
                 )}
+                {order.status === 'paid' && (
+                  <span className="order-row__pay-hint">填地址</span>
+                )}
+                {order.status === 'shipped' && (
+                  <span className="order-row__pay-hint">确认收货</span>
+                )}
+                {(order.status === 'cancelled' || order.status === 'refunded') && (
+                  <span className="order-row__pay-hint order-row__pay-hint--muted">
+                    查看详情
+                  </span>
+                )}
               </div>
             </Link>
           </li>

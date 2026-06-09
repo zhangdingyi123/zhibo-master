@@ -350,7 +350,19 @@ func (h *Hub) handleBid(c *Client, raw json.RawMessage) {
 	_ = result
 }
 
-// runCountdownLoop 服务端权威倒计时广播（4.5），200ms 精度
+// ClientCount 返回指定房间的 WS 连接数（用于主播端进房人数统计）
+func (h *Hub) ClientCount(roomID string) int {
+	h.mu.RLock()
+	r, ok := h.rooms[roomID]
+	h.mu.RUnlock()
+	if !ok {
+		return 0
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.clients)
+}
+
 // Stats 返回当前 WS 连接数与活跃房间数（5.6）
 func (h *Hub) Stats() (connections int, rooms int) {
 	h.mu.RLock()

@@ -1,10 +1,13 @@
 import type {
   AuctionRules,
   AuctionSession,
+  LiveRoom,
   OrderListItem,
   Paginated,
   Product,
   SessionStatus,
+  SessionSummary,
+  ShippingAddressBody,
 } from './types'
 import { userApiRequest } from './userClient'
 
@@ -63,6 +66,17 @@ export function getAuction(sessionId: number) {
   return userApiRequest<UserAuctionDetail>(`/auctions/${sessionId}`)
 }
 
+export interface UserLiveRoomDetail {
+  roomId: string
+  liveRoom: LiveRoom
+  current?: UserAuctionDetail
+  history: SessionSummary[]
+}
+
+export function getLiveRoom(roomId: string) {
+  return userApiRequest<UserLiveRoomDetail>(`/rooms/${encodeURIComponent(roomId)}`)
+}
+
 export function listMyOrders(params?: {
   status?: string
   page?: number
@@ -86,4 +100,24 @@ export function getOrderBySession(sessionId: number) {
 
 export function mockPayOrder(orderId: number) {
   return userApiRequest<OrderListItem>(`/orders/${orderId}/mock-pay`, { method: 'POST' })
+}
+
+export function submitShippingAddress(orderId: number, body: ShippingAddressBody) {
+  return userApiRequest<OrderListItem>(`/orders/${orderId}/shipping-address`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+export function confirmReceive(orderId: number) {
+  return userApiRequest<OrderListItem>(`/orders/${orderId}/confirm-receive`, {
+    method: 'POST',
+  })
+}
+
+export function cancelOrder(orderId: number, reason: string) {
+  return userApiRequest<OrderListItem>(`/orders/${orderId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
 }

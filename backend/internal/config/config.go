@@ -18,6 +18,11 @@ type Config struct {
 	StreamRTMPHost   string
 	StreamHLSBase    string
 	PayTimeoutMinutes int
+	AIAPIKey     string
+	AIAPIBase    string
+	AIModel      string
+	AITTSModel   string
+	AITTSVoice   string
 }
 
 func Load() Config {
@@ -43,6 +48,11 @@ func Load() Config {
 		StreamRTMPHost:    getEnv("STREAM_RTMP_HOST", "localhost:1935"),
 		StreamHLSBase:     getEnv("STREAM_HLS_BASE", "/live"),
 		PayTimeoutMinutes: payTimeoutMin,
+		AIAPIKey:          getEnv("AI_API_KEY", ""),
+		AIAPIBase:         getEnv("AI_API_BASE", "https://api.openai.com/v1"),
+		AIModel:           getEnv("AI_MODEL", "gpt-4o-mini"),
+		AITTSModel:        getEnv("AI_TTS_MODEL", "tts-1"),
+		AITTSVoice:        getEnv("AI_TTS_VOICE", "nova"),
 	}
 }
 

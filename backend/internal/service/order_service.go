@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/zhibo/backend/internal/domain"
@@ -14,6 +15,7 @@ import (
 type OrderService struct {
 	orders     *repository.OrderRepo
 	products   *repository.ProductRepo
+	messages   *MessageService
 	payTimeout time.Duration
 }
 
@@ -22,6 +24,10 @@ func NewOrderService(orders *repository.OrderRepo, products *repository.ProductR
 		payTimeout = 30 * time.Minute
 	}
 	return &OrderService{orders: orders, products: products, payTimeout: payTimeout}
+}
+
+func (s *OrderService) SetMessageService(messages *MessageService) {
+	s.messages = messages
 }
 
 type ListOrdersInput struct {
@@ -134,6 +140,222 @@ func (s *OrderService) ListForBuyer(ctx context.Context, buyerID uint64, in List
 		Page:     page,
 		PageSize: pageSize,
 	}, nil
+}
+
+type ShippingAddressInput struct {
+	ReceiverName    string `json:"receiverName"`
+	ReceiverPhone   string `json:"receiverPhone"`
+	ReceiverAddress string `json:"receiverAddress"`
+}
+
+type ShipOrderInput struct {
+	TrackingNo string `json:"trackingNo"`
+}
+
+type AftersaleInput struct {
+	Reason string `json:"reason"`
+}
+
+// SubmitShippingAddress 买家填写 / 更新收货地址（仅 paid）
+func (s *OrderService) SubmitShippingAddress(ctx context.Context, buyerID, orderID uint64, in ShippingAddressInput) (*BuyerOrderItem, error) {
+	name := strings.TrimSpace(in.ReceiverName)
+	phone := strings.TrimSpace(in.ReceiverPhone)
+	address := strings.TrimSpace(in.ReceiverAddress)
+	if name == "" || phone == "" || address == "" {
+		return nil, domain.ErrShippingAddressRequired
+	}
+	o, err := s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.BuyerID != buyerID {
+		return nil, domain.ErrForbidden
+	}
+	if o.Status != domain.OrderStatusPaid {
+		return nil, domain.ErrInvalidStateTransition
+	}
+	if err := s.orders.UpdateShipping(ctx, orderID, name, phone, address); err != nil {
+		return nil, err
+	}
+	o, err = s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	return s.toBuyerOrderItem(ctx, o)
+}
+
+// ShipOrder 主播发货：paid → shipped
+func (s *OrderService) ShipOrder(ctx context.Context, sellerID, orderID uint64, in ShipOrderInput) (*domain.Order, error) {
+	o, err := s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.SellerID != sellerID {
+		return nil, domain.ErrForbidden
+	}
+	if o.Status != domain.OrderStatusPaid {
+		return nil, domain.ErrInvalidStateTransition
+	}
+	if !o.HasShippingAddress() {
+		return nil, domain.ErrOrderAddressMissing
+	}
+	trackingNo := strings.TrimSpace(in.TrackingNo)
+	if err := s.orders.MarkShipped(ctx, orderID, trackingNo); err != nil {
+		return nil, err
+	}
+	o, err = s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if s.messages != nil {
+		productName := ""
+		if p, pErr := s.products.GetByID(ctx, o.ProductID); pErr == nil && p != nil {
+			productName = p.Name
+		}
+		s.messages.FanOutOnShipped(ctx, o, productName)
+	}
+	return o, nil
+}
+
+// CancelPendingByBuyer 买家取消待支付订单
+func (s *OrderService) CancelPendingByBuyer(ctx context.Context, buyerID, orderID uint64, in AftersaleInput) (*BuyerOrderItem, error) {
+	if err := s.closeExpiredPending(ctx); err != nil {
+		return nil, err
+	}
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" {
+		return nil, domain.ErrCancelReasonRequired
+	}
+	o, err := s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.BuyerID != buyerID {
+		return nil, domain.ErrForbidden
+	}
+	if o.Status != domain.OrderStatusPendingPay {
+		return nil, domain.ErrOrderNotCancellable
+	}
+	if s.isPayExpired(o, time.Now()) {
+		return nil, domain.ErrOrderPayExpired
+	}
+	if err := s.orders.MarkCancelled(ctx, orderID, reason, domain.OrderActorBuyer); err != nil {
+		return nil, err
+	}
+	return s.notifyAfterCancel(ctx, orderID)
+}
+
+// CancelPendingBySeller 主播取消待支付订单（误拍协商等）
+func (s *OrderService) CancelPendingBySeller(ctx context.Context, sellerID, orderID uint64, in AftersaleInput) (*domain.Order, error) {
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" {
+		return nil, domain.ErrCancelReasonRequired
+	}
+	o, err := s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.SellerID != sellerID {
+		return nil, domain.ErrForbidden
+	}
+	if o.Status != domain.OrderStatusPendingPay {
+		return nil, domain.ErrOrderNotCancellable
+	}
+	if err := s.orders.MarkCancelled(ctx, orderID, reason, domain.OrderActorSeller); err != nil {
+		return nil, err
+	}
+	return s.notifyAfterCancelAdmin(ctx, orderID)
+}
+
+// RefundBySeller 主播模拟退款：paid / shipped → refunded（已完成不可退）
+func (s *OrderService) RefundBySeller(ctx context.Context, sellerID, orderID uint64, in AftersaleInput) (*domain.Order, error) {
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" {
+		return nil, domain.ErrCancelReasonRequired
+	}
+	o, err := s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.SellerID != sellerID {
+		return nil, domain.ErrForbidden
+	}
+	var from domain.OrderStatus
+	switch o.Status {
+	case domain.OrderStatusPaid:
+		from = domain.OrderStatusPaid
+	case domain.OrderStatusShipped:
+		from = domain.OrderStatusShipped
+	default:
+		return nil, domain.ErrOrderNotRefundable
+	}
+	if err := s.orders.MarkRefunded(ctx, orderID, reason, domain.OrderActorSeller, from); err != nil {
+		return nil, err
+	}
+	o, err = s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if s.messages != nil {
+		productName := ""
+		if p, pErr := s.products.GetByID(ctx, o.ProductID); pErr == nil && p != nil {
+			productName = p.Name
+		}
+		s.messages.FanOutOnOrderRefunded(ctx, o, productName)
+	}
+	return o, nil
+}
+
+func (s *OrderService) notifyAfterCancel(ctx context.Context, orderID uint64) (*BuyerOrderItem, error) {
+	o, err := s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if s.messages != nil {
+		productName := ""
+		if p, pErr := s.products.GetByID(ctx, o.ProductID); pErr == nil && p != nil {
+			productName = p.Name
+		}
+		s.messages.FanOutOnOrderCancelled(ctx, o, productName)
+	}
+	return s.toBuyerOrderItem(ctx, o)
+}
+
+func (s *OrderService) notifyAfterCancelAdmin(ctx context.Context, orderID uint64) (*domain.Order, error) {
+	o, err := s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if s.messages != nil {
+		productName := ""
+		if p, pErr := s.products.GetByID(ctx, o.ProductID); pErr == nil && p != nil {
+			productName = p.Name
+		}
+		s.messages.FanOutOnOrderCancelled(ctx, o, productName)
+	}
+	return o, nil
+}
+
+// ConfirmReceive 买家确认收货：shipped → completed
+func (s *OrderService) ConfirmReceive(ctx context.Context, buyerID, orderID uint64) (*BuyerOrderItem, error) {
+	o, err := s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if o.BuyerID != buyerID {
+		return nil, domain.ErrForbidden
+	}
+	if o.Status != domain.OrderStatusShipped {
+		return nil, domain.ErrInvalidStateTransition
+	}
+	if err := s.orders.MarkCompleted(ctx, orderID); err != nil {
+		return nil, err
+	}
+	o, err = s.orders.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	return s.toBuyerOrderItem(ctx, o)
 }
 
 // MockPay 模拟支付：仅 pending_pay 且未超时可支付

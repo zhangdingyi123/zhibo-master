@@ -37,29 +37,22 @@ bash scripts/observability-up.sh
 
 ---
 
-## 手动部署（docker-compose V1）
+## 手动部署（docker-compose 1.29 会报 ContainerConfig）
 
-ECS 若只有 `docker-compose`（无 `docker compose` 插件）：
+ECS 上 **不要用 `docker-compose up` 启监控**，直接用脚本（内部 `docker run`）：
 
 ```bash
 cd /opt/zhibo
-
-# 只启监控 + 重载 nginx，不动 mysql/redis
-docker rm -f zhibo-prometheus zhibo-grafana 2>/dev/null || true
-docker-compose -f docker-compose.prod.yml up -d --no-deps prometheus grafana nginx
+bash scripts/observability-up.sh
 ```
 
-`.env` 中可设置 Grafana 子路径根 URL（与公网 IP 一致）：
+`.env` 中可设置 Grafana 子路径（与公网 IP 一致）：
 
 ```env
 GRAFANA_ROOT_URL=http://47.97.176.185/monitor/
 ```
 
-修改后重启 Grafana：
-
-```bash
-docker-compose -f docker-compose.prod.yml up -d --no-deps grafana
-```
+修改后重新运行 `bash scripts/observability-up.sh`。
 
 ---
 
@@ -125,12 +118,13 @@ docker-compose -f docker-compose.prod.yml up -d --no-deps grafana nginx
 
 ### docker-compose 报 ContainerConfig
 
-不要用合并 yml 重建全栈。只启监控：
+**不要用 `docker-compose up` 重建容器**。改用：
 
 ```bash
-docker rm -f zhibo-prometheus zhibo-grafana
-docker-compose -f docker-compose.prod.yml up -d --no-deps prometheus grafana nginx
+bash scripts/observability-up.sh
 ```
+
+脚本使用 `docker run`，绕过 compose 1.29 与新版 Docker 的不兼容。
 
 ---
 

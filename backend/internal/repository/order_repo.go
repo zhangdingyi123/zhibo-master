@@ -53,9 +53,13 @@ func (r *OrderRepo) Create(ctx context.Context, o *domain.Order) error {
 	return nil
 }
 
+const orderSelectCols = `id, order_no, session_id, product_id, buyer_id, seller_id, amount, status,
+		pay_expire_at, paid_at, receiver_name, receiver_phone, receiver_address, tracking_no,
+		shipped_at, completed_at, cancel_reason, cancelled_by, cancelled_at, refunded_at,
+		created_at, updated_at`
+
 func (r *OrderRepo) GetByID(ctx context.Context, id uint64) (*domain.Order, error) {
-	const q = `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, pay_expire_at, paid_at, created_at, updated_at
-		FROM orders WHERE id = ?`
+	const q = `SELECT ` + orderSelectCols + ` FROM orders WHERE id = ?`
 	row := r.db.QueryRowContext(ctx, q, id)
 	o, err := scanOrderRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -67,9 +71,28 @@ func (r *OrderRepo) GetByID(ctx context.Context, id uint64) (*domain.Order, erro
 	return o, nil
 }
 
+// CountPaidBySessionIDs 统计指定场次中已支付及以上状态的订单数
+func (r *OrderRepo) CountPaidBySessionIDs(ctx context.Context, sessionIDs []uint64) (int, error) {
+	if len(sessionIDs) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(sessionIDs))
+	args := make([]any, len(sessionIDs))
+	for i, id := range sessionIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := `SELECT COUNT(*) FROM orders WHERE session_id IN (` + strings.Join(placeholders, ",") +
+		`) AND status IN ('paid', 'shipped', 'completed')`
+	var count int
+	if err := r.db.QueryRowContext(ctx, q, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count paid orders: %w", err)
+	}
+	return count, nil
+}
+
 func (r *OrderRepo) GetBySessionID(ctx context.Context, sessionID uint64) (*domain.Order, error) {
-	const q = `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, pay_expire_at, paid_at, created_at, updated_at
-		FROM orders WHERE session_id = ?`
+	const q = `SELECT ` + orderSelectCols + ` FROM orders WHERE session_id = ?`
 	row := r.db.QueryRowContext(ctx, q, sessionID)
 	o, err := scanOrderRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -122,8 +145,7 @@ func (r *OrderRepo) List(ctx context.Context, f OrderFilter) ([]domain.Order, in
 		return nil, 0, fmt.Errorf("count orders: %w", err)
 	}
 
-	listQ := `SELECT id, order_no, session_id, product_id, buyer_id, seller_id, amount, status, pay_expire_at, paid_at, created_at, updated_at
-		FROM orders WHERE ` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	listQ := `SELECT ` + orderSelectCols + ` FROM orders WHERE ` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
 	listArgs := append(append([]any{}, args...), f.PageSize, offset)
 	rows, err := r.db.QueryContext(ctx, listQ, listArgs...)
 	if err != nil {
@@ -152,7 +174,10 @@ func (r *OrderRepo) MapLatestByProductIDs(ctx context.Context, productIDs []uint
 	placeholders := placeholders(len(productIDs))
 	args := uint64sToAny(productIDs)
 
-	q := `SELECT o.id, o.order_no, o.session_id, o.product_id, o.buyer_id, o.seller_id, o.amount, o.status, o.pay_expire_at, o.paid_at, o.created_at, o.updated_at
+	q := `SELECT o.id, o.order_no, o.session_id, o.product_id, o.buyer_id, o.seller_id, o.amount, o.status,
+		o.pay_expire_at, o.paid_at, o.receiver_name, o.receiver_phone, o.receiver_address, o.tracking_no,
+		o.shipped_at, o.completed_at, o.cancel_reason, o.cancelled_by, o.cancelled_at, o.refunded_at,
+		o.created_at, o.updated_at
 		FROM orders o
 		INNER JOIN (
 			SELECT product_id, MAX(id) AS max_id FROM orders WHERE product_id IN (` + placeholders + `) GROUP BY product_id
@@ -202,36 +227,127 @@ func (r *OrderRepo) MarkPaid(ctx context.Context, orderID uint64) error {
 	return nil
 }
 
-func scanOrderRow(row *sql.Row) (*domain.Order, error) {
-	var o domain.Order
-	var status string
-	var payExpireAt, paidAt sql.NullTime
-	err := row.Scan(
-		&o.ID, &o.OrderNo, &o.SessionID, &o.ProductID, &o.BuyerID, &o.SellerID,
-		&o.Amount, &status, &payExpireAt, &paidAt, &o.CreatedAt, &o.UpdatedAt,
+func (r *OrderRepo) UpdateShipping(ctx context.Context, orderID uint64, name, phone, address string) error {
+	const q = `UPDATE orders SET receiver_name = ?, receiver_phone = ?, receiver_address = ?, updated_at = NOW(3)
+		WHERE id = ? AND status = ?`
+	res, err := r.db.ExecContext(ctx, q, name, phone, address, orderID, string(domain.OrderStatusPaid))
+	if err != nil {
+		return fmt.Errorf("update shipping: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrInvalidStateTransition
+	}
+	return nil
+}
+
+func (r *OrderRepo) MarkShipped(ctx context.Context, orderID uint64, trackingNo string) error {
+	const q = `UPDATE orders SET status = ?, tracking_no = ?, shipped_at = NOW(3), updated_at = NOW(3)
+		WHERE id = ? AND status = ?
+		AND receiver_name IS NOT NULL AND receiver_name != ''
+		AND receiver_phone IS NOT NULL AND receiver_phone != ''
+		AND receiver_address IS NOT NULL AND receiver_address != ''`
+	res, err := r.db.ExecContext(ctx, q, string(domain.OrderStatusShipped), nullString(trackingNo), orderID, string(domain.OrderStatusPaid))
+	if err != nil {
+		return fmt.Errorf("mark order shipped: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		o, getErr := r.GetByID(ctx, orderID)
+		if getErr != nil {
+			return getErr
+		}
+		if o.Status != domain.OrderStatusPaid {
+			return domain.ErrInvalidStateTransition
+		}
+		return domain.ErrOrderAddressMissing
+	}
+	return nil
+}
+
+func (r *OrderRepo) MarkCancelled(ctx context.Context, orderID uint64, reason string, by domain.OrderActor) error {
+	const q = `UPDATE orders SET status = ?, cancel_reason = ?, cancelled_by = ?, cancelled_at = NOW(3), updated_at = NOW(3)
+		WHERE id = ? AND status = ?`
+	res, err := r.db.ExecContext(ctx, q,
+		string(domain.OrderStatusCancelled), reason, string(by), orderID, string(domain.OrderStatusPendingPay),
 	)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("mark order cancelled: %w", err)
 	}
-	o.Status = domain.OrderStatus(status)
-	if payExpireAt.Valid {
-		t := payExpireAt.Time
-		o.PayExpireAt = &t
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
 	}
-	if paidAt.Valid {
-		t := paidAt.Time
-		o.PaidAt = &t
+	if n == 0 {
+		return domain.ErrOrderNotCancellable
 	}
-	return &o, nil
+	return nil
+}
+
+func (r *OrderRepo) MarkRefunded(ctx context.Context, orderID uint64, reason string, by domain.OrderActor, from domain.OrderStatus) error {
+	const q = `UPDATE orders SET status = ?, cancel_reason = ?, cancelled_by = ?, refunded_at = NOW(3), updated_at = NOW(3)
+		WHERE id = ? AND status = ?`
+	res, err := r.db.ExecContext(ctx, q,
+		string(domain.OrderStatusRefunded), reason, string(by), orderID, string(from),
+	)
+	if err != nil {
+		return fmt.Errorf("mark order refunded: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrOrderNotRefundable
+	}
+	return nil
+}
+
+func (r *OrderRepo) MarkCompleted(ctx context.Context, orderID uint64) error {
+	const q = `UPDATE orders SET status = ?, completed_at = NOW(3), updated_at = NOW(3) WHERE id = ? AND status = ?`
+	res, err := r.db.ExecContext(ctx, q, string(domain.OrderStatusCompleted), orderID, string(domain.OrderStatusShipped))
+	if err != nil {
+		return fmt.Errorf("mark order completed: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrInvalidStateTransition
+	}
+	return nil
+}
+
+func scanOrderRow(row *sql.Row) (*domain.Order, error) {
+	return scanOrder(row)
 }
 
 func scanOrderFromRows(rows *sql.Rows) (*domain.Order, error) {
+	return scanOrder(rows)
+}
+
+type scanOrderRowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanOrder(s scanOrderRowScanner) (*domain.Order, error) {
 	var o domain.Order
 	var status string
-	var payExpireAt, paidAt sql.NullTime
-	err := rows.Scan(
+	var payExpireAt, paidAt, shippedAt, completedAt, cancelledAt, refundedAt sql.NullTime
+	var receiverName, receiverPhone, receiverAddress, trackingNo, cancelReason, cancelledBy sql.NullString
+	err := s.Scan(
 		&o.ID, &o.OrderNo, &o.SessionID, &o.ProductID, &o.BuyerID, &o.SellerID,
-		&o.Amount, &status, &payExpireAt, &paidAt, &o.CreatedAt, &o.UpdatedAt,
+		&o.Amount, &status, &payExpireAt, &paidAt,
+		&receiverName, &receiverPhone, &receiverAddress, &trackingNo,
+		&shippedAt, &completedAt, &cancelReason, &cancelledBy, &cancelledAt, &refundedAt,
+		&o.CreatedAt, &o.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -244,6 +360,40 @@ func scanOrderFromRows(rows *sql.Rows) (*domain.Order, error) {
 	if paidAt.Valid {
 		t := paidAt.Time
 		o.PaidAt = &t
+	}
+	if receiverName.Valid {
+		o.ReceiverName = receiverName.String
+	}
+	if receiverPhone.Valid {
+		o.ReceiverPhone = receiverPhone.String
+	}
+	if receiverAddress.Valid {
+		o.ReceiverAddress = receiverAddress.String
+	}
+	if trackingNo.Valid {
+		o.TrackingNo = trackingNo.String
+	}
+	if shippedAt.Valid {
+		t := shippedAt.Time
+		o.ShippedAt = &t
+	}
+	if completedAt.Valid {
+		t := completedAt.Time
+		o.CompletedAt = &t
+	}
+	if cancelReason.Valid {
+		o.CancelReason = cancelReason.String
+	}
+	if cancelledBy.Valid {
+		o.CancelledBy = domain.OrderActor(cancelledBy.String)
+	}
+	if cancelledAt.Valid {
+		t := cancelledAt.Time
+		o.CancelledAt = &t
+	}
+	if refundedAt.Valid {
+		t := refundedAt.Time
+		o.RefundedAt = &t
 	}
 	return &o, nil
 }
@@ -253,4 +403,11 @@ func nullTime(t *time.Time) any {
 		return nil
 	}
 	return *t
+}
+
+func nullString(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }

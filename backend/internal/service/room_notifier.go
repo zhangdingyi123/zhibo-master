@@ -12,6 +12,7 @@ type RoomNotifier interface {
 	OnBid(ctx context.Context, result *PlaceBidResult, prevEndAt *time.Time)
 	OnSettled(ctx context.Context, session *domain.AuctionSession, order *domain.Order)
 	OnCancelled(ctx context.Context, session *domain.AuctionSession, reason string)
+	OnSessionSwitch(ctx context.Context, liveRoom *domain.LiveRoom, previous *SessionSummary, current *UserAuctionDetail, history []SessionSummary)
 }
 
 // BidAwareNotifier 支持写扩散前快照（领先者）
@@ -26,3 +27,5 @@ type NoopRoomNotifier struct{}
 func (NoopRoomNotifier) OnBid(context.Context, *PlaceBidResult, *time.Time)       {}
 func (NoopRoomNotifier) OnSettled(context.Context, *domain.AuctionSession, *domain.Order) {}
 func (NoopRoomNotifier) OnCancelled(context.Context, *domain.AuctionSession, string) {}
+func (NoopRoomNotifier) OnSessionSwitch(context.Context, *domain.LiveRoom, *SessionSummary, *UserAuctionDetail, []SessionSummary) {
+}

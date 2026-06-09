@@ -9,9 +9,12 @@ import { ORDER_STATUS_LABEL } from '../labels'
 const STATUS_OPTIONS: { value: '' | OrderStatus; label: string }[] = [
   { value: '', label: '全部状态' },
   { value: 'pending_pay', label: '待支付' },
-  { value: 'paid', label: '已支付' },
+  { value: 'paid', label: '待发货' },
+  { value: 'shipped', label: '待收货' },
+  { value: 'completed', label: '已完成' },
   { value: 'cancelled', label: '已取消' },
   { value: 'closed', label: '已关闭' },
+  { value: 'refunded', label: '已退款' },
 ]
 
 export function OrderListPage() {

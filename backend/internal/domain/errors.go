@@ -32,6 +32,10 @@ var (
 	ErrCancelReasonRequired    = errors.New("请填写取消原因")
 	ErrOrderAlreadyExists      = errors.New("订单已存在")
 	ErrOrderPayExpired         = errors.New("订单支付已超时")
+	ErrShippingAddressRequired = errors.New("请填写完整收货信息")
+	ErrOrderAddressMissing     = errors.New("买家尚未填写收货地址")
+	ErrOrderNotCancellable     = errors.New("当前订单不可取消")
+	ErrOrderNotRefundable      = errors.New("当前订单不可退款")
 	ErrSettlementNoWinner      = errors.New("成交须指定胜者")
 
 	ErrBidTooLow           = errors.New("出价低于最低合法价")
@@ -41,4 +45,17 @@ var (
 	ErrVersionConflict     = errors.New("出价冲突，请重试")
 	ErrSessionLockBusy     = errors.New("场次繁忙，请稍后重试")
 	ErrAuctionNotVisible   = errors.New("场次不可见")
+
+	ErrLiveRoomNotFound       = errors.New("直播房间不存在")
+	ErrLiveRoomNotLive        = errors.New("直播未开始或已结束")
+	ErrLiveRoomNoCurrent      = errors.New("当前无进行中场次")
+	ErrLiveRoomNoNextSession  = errors.New("队列中无待上架场次")
+	ErrLiveRoomSessionBusy    = errors.New("当前场次仍在进行中，请先结束")
+	ErrLiveRoomTitleRequired  = errors.New("直播标题不能为空")
+
+	ErrAIServiceUnavailable = errors.New("AI 服务暂不可用，请稍后重试")
+	ErrAIGenerationFailed   = errors.New("AI 文案生成失败")
+	ErrTTSServiceUnavailable = errors.New("TTS 服务未配置或暂不可用")
+	ErrTTSInputRequired     = errors.New("解说文本不能为空")
+	ErrTTSSynthesisFailed   = errors.New("语音合成失败")
 )

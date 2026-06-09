@@ -114,6 +114,38 @@ func (n *Notifier) OnSettled(ctx context.Context, session *domain.AuctionSession
 	})
 }
 
+// SessionSwitchPayload 连拍切品
+type SessionSwitchPayload struct {
+	LiveRoomID uint64                    `json:"liveRoomId"`
+	RoomID     string                    `json:"roomId"`
+	Previous   *service.SessionSummary   `json:"previous,omitempty"`
+	Current    *service.UserAuctionDetail `json:"current,omitempty"`
+	History    []service.SessionSummary  `json:"history"`
+}
+
+func (n *Notifier) OnSessionSwitch(
+	ctx context.Context,
+	liveRoom *domain.LiveRoom,
+	previous *service.SessionSummary,
+	current *service.UserAuctionDetail,
+	history []service.SessionSummary,
+) {
+	if n == nil || n.hub == nil || liveRoom == nil {
+		return
+	}
+	if n.cache != nil && current != nil {
+		_ = n.cache.Invalidate(ctx, liveRoom.RoomID, current.Session.ID)
+		_ = n.cache.RefreshFromSession(ctx, &current.Session)
+	}
+	n.hub.Publish(liveRoom.RoomID, EventSessionSwitch, SessionSwitchPayload{
+		LiveRoomID: liveRoom.ID,
+		RoomID:     liveRoom.RoomID,
+		Previous:   previous,
+		Current:    current,
+		History:    history,
+	})
+}
+
 func (n *Notifier) OnCancelled(ctx context.Context, session *domain.AuctionSession, reason string) {
 	if n == nil || n.hub == nil || session == nil {
 		return

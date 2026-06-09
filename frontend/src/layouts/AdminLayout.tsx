@@ -30,6 +30,7 @@ export function AdminLayout() {
             数据概览
           </NavLink>
           <NavLink to="/admin/products">商品管理</NavLink>
+          <NavLink to="/admin/live-rooms">直播连拍</NavLink>
           <NavLink to="/admin/orders">订单管理</NavLink>
           <a href="/app" className="admin-nav__external" target="_blank" rel="noreferrer">
             用户端 H5 →

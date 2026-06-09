@@ -21,18 +21,40 @@ func NewSessionRepo(db *sql.DB) *SessionRepo {
 type CreateSessionInput struct {
 	ProductID        uint64
 	AnchorID         uint64
+	RoomID           string
+	LiveRoomID       *uint64
+	SeqInRoom        uint32
 	Rules            domain.AuctionRules
 	ScheduledStartAt sql.NullTime
 }
 
+const sessionSelectCols = `id, product_id, anchor_id, live_room_id, seq_in_room, room_id, status,
+	starting_price, bid_increment, cap_price,
+	duration_sec, extend_threshold_sec, extend_sec,
+	current_price, bid_count, participant_count, winner_id, version,
+	scheduled_start_at, started_at, end_at, settled_at, cancel_reason,
+	created_at, updated_at`
+
 func (r *SessionRepo) Create(ctx context.Context, in CreateSessionInput) (*domain.AuctionSession, error) {
-	placeholderRoom := fmt.Sprintf("room_tmp_%d", time.Now().UnixNano())
+	placeholderRoom := in.RoomID
+	if placeholderRoom == "" {
+		placeholderRoom = fmt.Sprintf("room_tmp_%d", time.Now().UnixNano())
+	}
+	seq := in.SeqInRoom
+	if seq == 0 {
+		seq = 1
+	}
+	var liveRoomID sql.NullInt64
+	if in.LiveRoomID != nil {
+		liveRoomID = sql.NullInt64{Int64: int64(*in.LiveRoomID), Valid: true}
+	}
+
 	const q = `INSERT INTO auction_sessions (
-		product_id, anchor_id, room_id, status,
+		product_id, anchor_id, live_room_id, seq_in_room, room_id, status,
 		starting_price, bid_increment, cap_price,
 		duration_sec, extend_threshold_sec, extend_sec,
 		current_price, scheduled_start_at
-	) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`
+	) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var capPrice sql.NullInt64
 	if in.Rules.CapPrice != nil {
@@ -40,7 +62,7 @@ func (r *SessionRepo) Create(ctx context.Context, in CreateSessionInput) (*domai
 	}
 
 	res, err := r.db.ExecContext(ctx, q,
-		in.ProductID, in.AnchorID, placeholderRoom,
+		in.ProductID, in.AnchorID, liveRoomID, seq, placeholderRoom,
 		in.Rules.StartingPrice, in.Rules.BidIncrement, capPrice,
 		in.Rules.DurationSec, in.Rules.ExtendThresholdSec, in.Rules.ExtendSec,
 		in.Rules.StartingPrice, in.ScheduledStartAt,
@@ -53,24 +75,20 @@ func (r *SessionRepo) Create(ctx context.Context, in CreateSessionInput) (*domai
 		return nil, fmt.Errorf("session last insert id: %w", err)
 	}
 	sessionID := uint64(id)
-	roomID := domain.DefaultRoomID(sessionID)
 
-	const uq = `UPDATE auction_sessions SET room_id = ? WHERE id = ?`
-	if _, err := r.db.ExecContext(ctx, uq, roomID, sessionID); err != nil {
-		return nil, fmt.Errorf("update room_id: %w", err)
+	if in.LiveRoomID == nil {
+		roomID := domain.DefaultRoomID(sessionID)
+		const uq = `UPDATE auction_sessions SET room_id = ? WHERE id = ?`
+		if _, err := r.db.ExecContext(ctx, uq, roomID, sessionID); err != nil {
+			return nil, fmt.Errorf("update room_id: %w", err)
+		}
 	}
 
 	return r.GetByID(ctx, sessionID)
 }
 
 func (r *SessionRepo) GetByID(ctx context.Context, id uint64) (*domain.AuctionSession, error) {
-	const q = `SELECT id, product_id, anchor_id, room_id, status,
-		starting_price, bid_increment, cap_price,
-		duration_sec, extend_threshold_sec, extend_sec,
-		current_price, bid_count, participant_count, winner_id, version,
-		scheduled_start_at, started_at, end_at, settled_at, cancel_reason,
-		created_at, updated_at
-		FROM auction_sessions WHERE id = ?`
+	const q = `SELECT ` + sessionSelectCols + ` FROM auction_sessions WHERE id = ?`
 	return r.scanOne(ctx, q, id)
 }
 
@@ -189,12 +207,7 @@ func (r *SessionRepo) MarkSettled(ctx context.Context, sessionID uint64, winnerI
 }
 
 func (r *SessionRepo) GetActiveByProductID(ctx context.Context, productID uint64) (*domain.AuctionSession, error) {
-	const q = `SELECT id, product_id, anchor_id, room_id, status,
-		starting_price, bid_increment, cap_price,
-		duration_sec, extend_threshold_sec, extend_sec,
-		current_price, bid_count, participant_count, winner_id, version,
-		scheduled_start_at, started_at, end_at, settled_at, cancel_reason,
-		created_at, updated_at
+	const q = `SELECT ` + sessionSelectCols + `
 		FROM auction_sessions WHERE product_id = ? AND status IN ('pending', 'running')
 		ORDER BY id DESC LIMIT 1`
 	row := r.db.QueryRowContext(ctx, q, productID)
@@ -215,7 +228,7 @@ func (r *SessionRepo) MapActiveByProductIDs(ctx context.Context, productIDs []ui
 	ph := placeholders(len(productIDs))
 	args := uint64sToAny(productIDs)
 
-	q := `SELECT s.id, s.product_id, s.anchor_id, s.room_id, s.status,
+	q := `SELECT s.id, s.product_id, s.anchor_id, s.live_room_id, s.seq_in_room, s.room_id, s.status,
 		s.starting_price, s.bid_increment, s.cap_price,
 		s.duration_sec, s.extend_threshold_sec, s.extend_sec,
 		s.current_price, s.bid_count, s.participant_count, s.winner_id, s.version,
@@ -252,7 +265,7 @@ func (r *SessionRepo) MapLatestByProductIDs(ctx context.Context, productIDs []ui
 	ph := placeholders(len(productIDs))
 	args := uint64sToAny(productIDs)
 
-	q := `SELECT s.id, s.product_id, s.anchor_id, s.room_id, s.status,
+	q := `SELECT s.id, s.product_id, s.anchor_id, s.live_room_id, s.seq_in_room, s.room_id, s.status,
 		s.starting_price, s.bid_increment, s.cap_price,
 		s.duration_sec, s.extend_threshold_sec, s.extend_sec,
 		s.current_price, s.bid_count, s.participant_count, s.winner_id, s.version,
@@ -295,20 +308,84 @@ type PublicSessionFilter struct {
 }
 
 func (r *SessionRepo) GetByRoomID(ctx context.Context, roomID string) (*domain.AuctionSession, error) {
-	const q = `SELECT id, product_id, anchor_id, room_id, status,
-		starting_price, bid_increment, cap_price,
-		duration_sec, extend_threshold_sec, extend_sec,
-		current_price, bid_count, participant_count, winner_id, version,
-		scheduled_start_at, started_at, end_at, settled_at, cancel_reason,
-		created_at, updated_at
-		FROM auction_sessions WHERE room_id = ?`
-	row := r.db.QueryRowContext(ctx, q, roomID)
+	const qLive = `SELECT current_session_id FROM live_rooms WHERE room_id = ? AND current_session_id IS NOT NULL LIMIT 1`
+	var currentID uint64
+	err := r.db.QueryRowContext(ctx, qLive, roomID).Scan(&currentID)
+	if err == nil && currentID > 0 {
+		return r.GetByID(ctx, currentID)
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("get live room current session: %w", err)
+	}
+
+	const qActive = `SELECT ` + sessionSelectCols + `
+		FROM auction_sessions WHERE room_id = ? AND status IN ('pending', 'running')
+		ORDER BY id DESC LIMIT 1`
+	row := r.db.QueryRowContext(ctx, qActive, roomID)
 	s, err := scanSessionRow(row)
+	if err == nil {
+		return s, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("get active session by room: %w", err)
+	}
+
+	const qAny = `SELECT ` + sessionSelectCols + `
+		FROM auction_sessions WHERE room_id = ? ORDER BY id DESC LIMIT 1`
+	row = r.db.QueryRowContext(ctx, qAny, roomID)
+	s, err = scanSessionRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get session by room: %w", err)
+	}
+	return s, nil
+}
+
+func (r *SessionRepo) NextSeqInLiveRoom(ctx context.Context, liveRoomID uint64) (uint32, error) {
+	const q = `SELECT COALESCE(MAX(seq_in_room), 0) + 1 FROM auction_sessions WHERE live_room_id = ?`
+	var seq uint32
+	if err := r.db.QueryRowContext(ctx, q, liveRoomID).Scan(&seq); err != nil {
+		return 0, fmt.Errorf("next seq in live room: %w", err)
+	}
+	return seq, nil
+}
+
+func (r *SessionRepo) ListByLiveRoomID(ctx context.Context, liveRoomID uint64) ([]domain.AuctionSession, error) {
+	const q = `SELECT ` + sessionSelectCols + `
+		FROM auction_sessions WHERE live_room_id = ? ORDER BY seq_in_room ASC, id ASC`
+	rows, err := r.db.QueryContext(ctx, q, liveRoomID)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions by live room: %w", err)
+	}
+	defer rows.Close()
+	var items []domain.AuctionSession
+	for rows.Next() {
+		s, err := scanSessionFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *s)
+	}
+	if items == nil {
+		items = []domain.AuctionSession{}
+	}
+	return items, rows.Err()
+}
+
+func (r *SessionRepo) GetNextPendingInLiveRoom(ctx context.Context, liveRoomID uint64, afterSeq uint32) (*domain.AuctionSession, error) {
+	const q = `SELECT ` + sessionSelectCols + `
+		FROM auction_sessions
+		WHERE live_room_id = ? AND status = 'pending' AND seq_in_room > ?
+		ORDER BY seq_in_room ASC LIMIT 1`
+	row := r.db.QueryRowContext(ctx, q, liveRoomID, afterSeq)
+	s, err := scanSessionRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get next pending session: %w", err)
 	}
 	return s, nil
 }
@@ -342,7 +419,7 @@ func (r *SessionRepo) ListPublic(ctx context.Context, f PublicSessionFilter) ([]
 		return nil, 0, fmt.Errorf("count public sessions: %w", err)
 	}
 
-	listQ := `SELECT s.id, s.product_id, s.anchor_id, s.room_id, s.status,
+	listQ := `SELECT s.id, s.product_id, s.anchor_id, s.live_room_id, s.seq_in_room, s.room_id, s.status,
 		s.starting_price, s.bid_increment, s.cap_price,
 		s.duration_sec, s.extend_threshold_sec, s.extend_sec,
 		s.current_price, s.bid_count, s.participant_count, s.winner_id, s.version,
@@ -376,13 +453,7 @@ func (r *SessionRepo) ListPublic(ctx context.Context, f PublicSessionFilter) ([]
 }
 
 func (r *SessionRepo) GetByIDForUpdate(ctx context.Context, tx *sql.Tx, id uint64) (*domain.AuctionSession, error) {
-	const q = `SELECT id, product_id, anchor_id, room_id, status,
-		starting_price, bid_increment, cap_price,
-		duration_sec, extend_threshold_sec, extend_sec,
-		current_price, bid_count, participant_count, winner_id, version,
-		scheduled_start_at, started_at, end_at, settled_at, cancel_reason,
-		created_at, updated_at
-		FROM auction_sessions WHERE id = ? FOR UPDATE`
+	const q = `SELECT ` + sessionSelectCols + ` FROM auction_sessions WHERE id = ? FOR UPDATE`
 	row := tx.QueryRowContext(ctx, q, id)
 	s, err := scanSessionRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -455,8 +526,9 @@ func scanPublicSessionRow(rows *sql.Rows) (*PublicSessionRow, error) {
 	var cancelReason sql.NullString
 	s := &item.Session
 
+	var liveRoomID sql.NullInt64
 	err := rows.Scan(
-		&s.ID, &s.ProductID, &s.AnchorID, &s.RoomID, &status,
+		&s.ID, &s.ProductID, &s.AnchorID, &liveRoomID, &s.SeqInRoom, &s.RoomID, &status,
 		&s.Rules.StartingPrice, &s.Rules.BidIncrement, &capPrice,
 		&s.Rules.DurationSec, &s.Rules.ExtendThresholdSec, &s.Rules.ExtendSec,
 		&s.CurrentPrice, &s.BidCount, &s.ParticipantCount, &winnerID, &s.Version,
@@ -468,34 +540,7 @@ func scanPublicSessionRow(rows *sql.Rows) (*PublicSessionRow, error) {
 		return nil, err
 	}
 	s.Status = domain.SessionStatus(status)
-	if capPrice.Valid {
-		v := capPrice.Int64
-		s.Rules.CapPrice = &v
-	}
-	if winnerID.Valid {
-		w := uint64(winnerID.Int64)
-		s.WinnerID = &w
-	}
-	if scheduledStart.Valid {
-		t := scheduledStart.Time
-		s.ScheduledStartAt = &t
-	}
-	if startedAt.Valid {
-		t := startedAt.Time
-		s.StartedAt = &t
-	}
-	if endAt.Valid {
-		t := endAt.Time
-		s.EndAt = &t
-	}
-	if settledAt.Valid {
-		t := settledAt.Time
-		s.SettledAt = &t
-	}
-	if cancelReason.Valid {
-		cr := cancelReason.String
-		s.CancelReason = &cr
-	}
+	applySessionScalars(s, liveRoomID, capPrice, winnerID, scheduledStart, startedAt, endAt, settledAt, cancelReason)
 	return &item, nil
 }
 
@@ -542,13 +587,14 @@ type scanRow struct{ *sql.Row }
 func scanSession(row rowScanner) (*domain.AuctionSession, error) {
 	var s domain.AuctionSession
 	var status string
+	var liveRoomID sql.NullInt64
 	var capPrice sql.NullInt64
 	var winnerID sql.NullInt64
 	var scheduledStart, startedAt, endAt, settledAt sql.NullTime
 	var cancelReason sql.NullString
 
 	err := row.Scan(
-		&s.ID, &s.ProductID, &s.AnchorID, &s.RoomID, &status,
+		&s.ID, &s.ProductID, &s.AnchorID, &liveRoomID, &s.SeqInRoom, &s.RoomID, &status,
 		&s.Rules.StartingPrice, &s.Rules.BidIncrement, &capPrice,
 		&s.Rules.DurationSec, &s.Rules.ExtendThresholdSec, &s.Rules.ExtendSec,
 		&s.CurrentPrice, &s.BidCount, &s.ParticipantCount, &winnerID, &s.Version,
@@ -559,6 +605,22 @@ func scanSession(row rowScanner) (*domain.AuctionSession, error) {
 		return nil, err
 	}
 	s.Status = domain.SessionStatus(status)
+	applySessionScalars(&s, liveRoomID, capPrice, winnerID, scheduledStart, startedAt, endAt, settledAt, cancelReason)
+	return &s, nil
+}
+
+func applySessionScalars(
+	s *domain.AuctionSession,
+	liveRoomID sql.NullInt64,
+	capPrice sql.NullInt64,
+	winnerID sql.NullInt64,
+	scheduledStart, startedAt, endAt, settledAt sql.NullTime,
+	cancelReason sql.NullString,
+) {
+	if liveRoomID.Valid {
+		lid := uint64(liveRoomID.Int64)
+		s.LiveRoomID = &lid
+	}
 	if capPrice.Valid {
 		v := capPrice.Int64
 		s.Rules.CapPrice = &v
@@ -587,7 +649,6 @@ func scanSession(row rowScanner) (*domain.AuctionSession, error) {
 		cr := cancelReason.String
 		s.CancelReason = &cr
 	}
-	return &s, nil
 }
 
 func placeholders(n int) string {

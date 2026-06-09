@@ -30,6 +30,7 @@ const (
 	EventAuctionExtended = "auction.extended"
 	EventAuctionSettled  = "auction.settled"
 	EventAuctionCancelled = "auction.cancelled"
+	EventSessionSwitch    = "session.switch"
 )
 
 // Envelope 统一消息信封

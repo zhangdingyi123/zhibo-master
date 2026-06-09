@@ -9,7 +9,8 @@ import { SearchBar } from '../../components/user/SearchBar'
 import { auctionEntryCta, auctionEntryPath } from '../../utils/auctionNav'
 import { useCountdown } from '../../hooks/useCountdown'
 import { formatCents } from '../../utils/money'
-import { formatRemainingMs } from '../../utils/time'
+import { ScheduledStartBanner } from '../../components/auction/ScheduledStartBanner'
+import { formatRemainingMs, remainingMsTo } from '../../utils/time'
 
 const TABS = [
   { key: '', label: '全部' },
@@ -205,6 +206,14 @@ export function AuctionListPage() {
                   <span className={`badge badge--${session.status}`}>
                     {SESSION_STATUS_LABEL[session.status]}
                   </span>
+                  {session.status === 'pending' &&
+                    session.scheduledStartAt &&
+                    (remainingMsTo(session.scheduledStartAt) ?? 0) > 0 && (
+                      <ScheduledStartBanner
+                        scheduledStartAt={session.scheduledStartAt}
+                        compact
+                      />
+                    )}
                   {session.status === 'running' && (
                     <RunningCountdown endAt={session.endAt} />
                   )}

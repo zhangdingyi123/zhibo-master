@@ -16,6 +16,7 @@ export const EventCountdownTick = 'countdown.tick'
 export const EventAuctionExtended = 'auction.extended'
 export const EventAuctionSettled = 'auction.settled'
 export const EventAuctionCancelled = 'auction.cancelled'
+export const EventSessionSwitch = 'session.switch'
 
 export type ConnectionState =
   | 'idle'
@@ -140,6 +141,37 @@ export type CancelledPayload = {
   session: { id: number }
   snapshot: SessionSnapshot
   reason: string
+}
+
+export type SessionSummaryPayload = {
+  sessionId: number
+  productId: number
+  productName: string
+  coverUrl: string
+  status: SessionStatus
+  finalPrice: number
+  winnerId?: number
+  seqInRoom: number
+}
+
+export type SessionSwitchPayload = {
+  liveRoomId: number
+  roomId: string
+  previous?: SessionSummaryPayload
+  current?: {
+    session: AuctionSession
+    product: { id: number; name: string; description?: string; coverUrl: string }
+    snapshot: SessionSnapshot
+  }
+  history: SessionSummaryPayload[]
+}
+
+export type AuctionSession = {
+  id: number
+  productId: number
+  roomId: string
+  status: SessionStatus
+  currentPrice: number
 }
 
 export type WsErrorPayload = {

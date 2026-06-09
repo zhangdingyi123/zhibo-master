@@ -13,3 +13,11 @@ export function remainingMsFromEndAt(endAt: string | undefined): number | null {
   if (Number.isNaN(end)) return null
   return Math.max(0, end - Date.now())
 }
+
+/** 距某 ISO 时间点的毫秒数（未来为正，已过为负） */
+export function remainingMsTo(iso: string | undefined): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return null
+  return t - Date.now()
+}

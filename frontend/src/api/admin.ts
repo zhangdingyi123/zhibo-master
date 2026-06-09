@@ -1,6 +1,8 @@
 import { apiRequest } from './client'
 import type {
   AuctionSession,
+  LiveRoom,
+  LiveRoomDetail,
   Order,
   Paginated,
   ProductBody,
@@ -27,6 +29,18 @@ export function listProducts(params: {
 
 export function getProduct(id: number) {
   return apiRequest<ProductView>(`/admin/products/${id}`)
+}
+
+export interface GenerateProductIntroResult {
+  description: string
+  source: 'llm' | 'template'
+}
+
+export function generateProductIntro(body: { name: string; keywords?: string }) {
+  return apiRequest<GenerateProductIntroResult>('/admin/products/ai-intro', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
 }
 
 export function createProduct(body: ProductBody) {
@@ -92,4 +106,64 @@ export function listOrders(params: {
 
 export function getOrder(id: number) {
   return apiRequest<Order>(`/admin/orders/${id}`)
+}
+
+export function createLiveRoom(title: string) {
+  return apiRequest<LiveRoom>('/admin/live-rooms', {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function listLiveRooms() {
+  return apiRequest<{ items: LiveRoom[] }>('/admin/live-rooms')
+}
+
+export function getLiveRoom(id: number) {
+  return apiRequest<LiveRoomDetail>(`/admin/live-rooms/${id}`)
+}
+
+export function startLiveRoom(id: number) {
+  return apiRequest<LiveRoom>(`/admin/live-rooms/${id}/start`, { method: 'POST' })
+}
+
+export function endLiveRoom(id: number) {
+  return apiRequest<LiveRoom>(`/admin/live-rooms/${id}/end`, { method: 'POST' })
+}
+
+export function addSessionToLiveRoom(
+  liveRoomId: number,
+  body: PublishAuctionBody & { productId: number },
+) {
+  return apiRequest<AuctionSession>(`/admin/live-rooms/${liveRoomId}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function endCurrentAndSwitch(liveRoomId: number) {
+  return apiRequest<LiveRoomDetail>(`/admin/live-rooms/${liveRoomId}/end-current`, {
+    method: 'POST',
+  })
+}
+
+export function shipOrder(id: number, trackingNo?: string) {
+  return apiRequest<Order>(`/admin/orders/${id}/ship`, {
+    method: 'POST',
+    body: JSON.stringify({ trackingNo: trackingNo ?? '' }),
+  })
+}
+
+export function cancelOrder(id: number, reason: string) {
+  return apiRequest<Order>(`/admin/orders/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export function refundOrder(id: number, reason: string) {
+  return apiRequest<Order>(`/admin/orders/${id}/refund`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
 }

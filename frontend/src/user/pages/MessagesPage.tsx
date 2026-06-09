@@ -21,6 +21,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'unread', label: '未读' },
   { key: 'auction', label: '竞拍' },
+  { key: 'order', label: '订单' },
 ]
 
 function formatTime(iso: string) {
@@ -59,8 +60,8 @@ export function MessagesPage() {
         unread: filter === 'unread',
       })
       let items = res.items
-      if (filter === 'auction') {
-        items = items.filter((m) => m.category === 'auction')
+      if (filter === 'auction' || filter === 'order') {
+        items = items.filter((m) => m.category === filter)
       }
       setMessages(items)
       setStats({ total: res.total, unread: res.unread })
@@ -77,7 +78,8 @@ export function MessagesPage() {
 
   const categoryCounts = useMemo(() => {
     const auction = messages.filter((m) => m.category === 'auction').length
-    return { auction }
+    const order = messages.filter((m) => m.category === 'order').length
+    return { auction, order }
   }, [messages])
 
   async function handleRead(msg: UserMessage) {
@@ -165,6 +167,9 @@ export function MessagesPage() {
               {f.key === 'auction' && categoryCounts.auction > 0 && (
                 <span className="messages-filter__badge">{categoryCounts.auction}</span>
               )}
+              {f.key === 'order' && categoryCounts.order > 0 && (
+                <span className="messages-filter__badge">{categoryCounts.order}</span>
+              )}
             </button>
           ))}
         </div>
@@ -198,6 +203,7 @@ export function MessagesPage() {
           {messages.map((msg, i) => {
             const Icon = messageEventIcon(msg.eventType)
             const sessionId = msg.payload?.sessionId as number | undefined
+            const orderId = msg.payload?.orderId as number | undefined
             const span = bentoSpan(msg, i)
             return (
               <article
@@ -221,7 +227,16 @@ export function MessagesPage() {
                   <p>{msg.body}</p>
                   <footer className="bento-card__foot">
                     <time dateTime={msg.createdAt}>{formatTime(msg.createdAt)}</time>
-                    {sessionId != null && (
+                    {orderId != null && (
+                      <Link
+                        to={`/app/orders/${orderId}`}
+                        className="bento-card__link"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        查看订单
+                      </Link>
+                    )}
+                    {orderId == null && sessionId != null && (
                       <Link
                         to={`/app/auction/${sessionId}`}
                         className="bento-card__link"

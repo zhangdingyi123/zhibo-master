@@ -55,3 +55,60 @@ func (h *OrderHandler) Get(c *gin.Context) {
 	}
 	response.OK(c, o)
 }
+
+func (h *OrderHandler) Ship(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	id, err := parseID(c.Param("id"))
+	if err != nil {
+		response.Fail(c, domain.ErrNotFound)
+		return
+	}
+	var body service.ShipOrderInput
+	_ = c.ShouldBindJSON(&body)
+	o, err := h.svc.ShipOrder(c.Request.Context(), user.ID, id, body)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, o)
+}
+
+func (h *OrderHandler) Cancel(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	id, err := parseID(c.Param("id"))
+	if err != nil {
+		response.Fail(c, domain.ErrNotFound)
+		return
+	}
+	var body service.AftersaleInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, domain.ErrCancelReasonRequired)
+		return
+	}
+	o, err := h.svc.CancelPendingBySeller(c.Request.Context(), user.ID, id, body)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, o)
+}
+
+func (h *OrderHandler) Refund(c *gin.Context) {
+	user := middleware.CurrentUser(c)
+	id, err := parseID(c.Param("id"))
+	if err != nil {
+		response.Fail(c, domain.ErrNotFound)
+		return
+	}
+	var body service.AftersaleInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, domain.ErrCancelReasonRequired)
+		return
+	}
+	o, err := h.svc.RefundBySeller(c.Request.Context(), user.ID, id, body)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, o)
+}
