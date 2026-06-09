@@ -45,6 +45,11 @@ services:
       FRONTEND_URLS: ${FRONTEND_URLS:-http://47.97.176.185}
       JWT_SECRET: ${JWT_SECRET:-please-change-me}
       PAY_TIMEOUT_MINUTES: ${PAY_TIMEOUT_MINUTES:-30}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_API_BASE: ${AI_API_BASE:-https://api.moonshot.cn/v1}
+      AI_MODEL: ${AI_MODEL:-moonshot-v1-8k}
+      AI_TTS_MODEL: ${AI_TTS_MODEL:-tts-1}
+      AI_TTS_VOICE: ${AI_TTS_VOICE:-nova}
     depends_on:
       mysql:
         condition: service_healthy
