@@ -405,9 +405,4 @@ func nullTime(t *time.Time) any {
 	return *t
 }
 
-func nullString(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}
+// nullString defined in message_repo.go
