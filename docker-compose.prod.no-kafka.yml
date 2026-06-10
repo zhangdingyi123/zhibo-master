@@ -1,25 +1,26 @@
-# 国内 ECS 拉取 Kafka/Redpanda 超时时使用：
+# 国内 ECS 无法拉取 Redpanda 时使用（兼容 docker-compose v1）：
 #   SKIP_KAFKA=1 bash scripts/redeploy.sh
-# 双 backend 仍可用，跨实例 WS 降级为 Redis Pub/Sub（见 docs/scaling.md）
+# 或：docker-compose -f docker-compose.prod.yml -f docker-compose.prod.no-kafka.yml up -d --build
+#
+# 用 alpine stub 满足 depends_on/healthcheck；backend 清空 KAFKA_BROKERS → Redis Pub/Sub 广播
 services:
   kafka:
-    profiles:
-      - kafka-only
+    image: alpine:3.20
+    container_name: zhibo-kafka
+    hostname: kafka
+    restart: unless-stopped
+    command: ["sleep", "infinity"]
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 5s
+      timeout: 3s
+      retries: 1
+      start_period: 1s
 
   backend:
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
       KAFKA_BROKERS: ""
 
   backend-2:
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
       KAFKA_BROKERS: ""
