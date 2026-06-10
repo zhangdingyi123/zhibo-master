@@ -25,7 +25,17 @@ export function LiveHostBar({
     setFollowing(isFollowing)
   }, [isFollowing])
 
-  if (!anchor) return null
+  if (!anchor) {
+    if (!liveTitle) return null
+    return (
+      <div className="live-host-bar live-host-bar--title-only">
+        <div className="live-host-bar__meta">
+          <strong className="live-host-bar__name">{liveTitle}</strong>
+          <span className="live-host-bar__sub">直播专场</span>
+        </div>
+      </div>
+    )
+  }
 
   async function handleFollow() {
     if (!isLoggedIn()) return

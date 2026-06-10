@@ -32,6 +32,8 @@ import { WinnerPayBar } from './WinnerPayBar'
 import { AICommentaryBar } from './AICommentaryBar'
 import { useNarrationVoice } from '../../hooks/useNarrationVoice'
 import { useProductNarration } from '../../hooks/useProductNarration'
+import { LiveRoomEmptyBanner } from './LiveRoomEmptyBanner'
+import type { LiveRoomStatus } from '../../api/types'
 
 type Props = {
   roomId?: string
@@ -41,6 +43,7 @@ type Props = {
   productDescription?: string
   coverUrl?: string
   liveRoomTitle?: string
+  liveRoomStatus?: LiveRoomStatus
   anchor?: AnchorBrief | null
   roomStats?: RoomSocialStats | null
   scheduledStartAt?: string
@@ -58,6 +61,7 @@ export function AuctionLiveRoom({
   productDescription,
   coverUrl,
   liveRoomTitle,
+  liveRoomStatus,
   anchor,
   roomStats,
   scheduledStartAt,
@@ -302,6 +306,9 @@ export function AuctionLiveRoom({
         )}
 
         <div className="live-room__auction-panel">
+          {multiSku && !productTitle && !snapshot && (
+            <LiveRoomEmptyBanner liveTitle={liveRoomTitle} status={liveRoomStatus} />
+          )}
           <LivePriceBoard snapshot={snapshot} connectionState={connectionState} />
           <button
             type="button"

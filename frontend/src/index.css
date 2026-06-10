@@ -77,6 +77,9 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 100dvh;
+}
+
+.live-room:not(.live-room--v2) {
   max-width: 430px;
   margin: 0 auto;
 }
@@ -1020,12 +1023,15 @@ body {
 }
 
 .mobile-shell--immersive {
+  width: 100%;
+  max-width: 100%;
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
 }
 
 .mobile-shell--immersive .mobile-main {
+  width: 100%;
   overflow: hidden;
   padding-bottom: 0;
   display: flex;
@@ -1808,20 +1814,21 @@ body {
   transform: translateY(-50%);
 }
 
+/* 旧版直播间宽屏侧栏（v2 已废弃，勿作用于 .live-room--v2） */
 @media (min-width: 520px) {
-  .live-room__rank-toggle {
+  .live-room:not(.live-room--v2) .live-room__rank-toggle {
     display: none;
   }
 
-  .live-room__body {
+  .live-room:not(.live-room--v2) .live-room__body {
     flex-direction: row;
   }
 
-  .live-room__main {
+  .live-room:not(.live-room--v2) .live-room__main {
     flex: 1.2;
   }
 
-  .live-room__side {
+  .live-room:not(.live-room--v2) .live-room__side {
     flex: 0.8;
     max-height: none;
     overflow: auto;
@@ -1829,7 +1836,7 @@ body {
     border-left: 1px solid var(--border);
   }
 
-  .live-room__side--open {
+  .live-room:not(.live-room--v2) .live-room__side--open {
     max-height: none;
   }
 }
@@ -3989,7 +3996,7 @@ body {
 
 /* 连播切品引导 */
 .next-up-banner {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 30;
   display: flex;
@@ -4428,9 +4435,43 @@ body {
 
 /* ---------- Live room v2 (immersive) ---------- */
 
-.live-room--v2 {
+.mobile-shell--immersive .mobile-main > .live-room--v2 {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: auto;
+  max-height: 100%;
   max-width: 100%;
+  margin: 0;
+}
+
+.mobile-shell--immersive .mobile-main > .live-room {
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+}
+
+.live-room--v2 {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   background: #050508;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.live-room--loading,
+.live-room--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 50vh;
+  padding: 2rem 1.25rem;
+  text-align: center;
 }
 
 .live-room--v2 .live-room__stage {
@@ -4438,24 +4479,68 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .live-room--v2 .live-room__video-wrap {
-  flex: 1;
-  min-height: 38vh;
-  max-height: 52vh;
+  flex: none;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
 }
 
 .live-room--v2 .live-video {
-  height: 100%;
-  min-height: 38vh;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  min-height: unset;
 }
 
 .live-room--v2 .live-video__cover,
 .live-room--v2 .live-video__gradient {
   height: 100%;
   object-fit: cover;
+}
+
+.live-room--v2 .live-room__footer--v2 {
+  flex-shrink: 0;
+}
+
+.live-room--v2 .live-room__auction-panel {
+  flex-shrink: 0;
+}
+
+.live-room-empty {
+  margin: 0.75rem 1rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgb(255 68 102 / 10%), rgb(255 122 89 / 6%));
+  border: 1px solid rgb(255 68 102 / 22%);
+  text-align: center;
+}
+
+.live-room-empty__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.live-room-empty__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: #fecdd3;
+}
+
+.live-room-empty__sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+}
+
+.live-host-bar--title-only {
+  padding-left: 0.75rem;
 }
 
 .live-room__overlay-top {
@@ -4714,15 +4799,16 @@ body {
 }
 
 @media (min-width: 520px) {
-  .live-room--v2 .live-room__body {
-    flex-direction: column;
+  .mobile-shell--immersive {
+    max-width: min(100%, 540px);
+    margin: 0 auto;
   }
 
-  .live-room--v2 {
-    max-width: 480px;
-    margin: 0 auto;
-    border-left: 1px solid var(--border);
-    border-right: 1px solid var(--border);
+  .live-room--v2 .live-room__stage,
+  .live-room--v2 .live-room__auction-panel,
+  .live-room--v2 .live-room__footer--v2 {
+    width: 100%;
+    max-width: 100%;
   }
 }
 
