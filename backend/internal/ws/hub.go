@@ -15,7 +15,7 @@ import (
 )
 
 // Hub 按 roomId 隔离的 WebSocket 房间网关（4.1）
-// Redis Pub/Sub 开启时：带 seq 事件跨实例广播；倒计时 tick 仍本机推送（避免多实例重复 fan-out）
+// Kafka（或 Redis Pub/Sub 降级）跨实例广播；倒计时 tick 仍本机推送
 type Hub struct {
 	rooms    map[string]*room
 	mu       sync.RWMutex
@@ -25,6 +25,7 @@ type Hub struct {
 	bidSvc   *service.BidService
 	limiter  *bidRateLimiter
 	redis    *redisc.Client
+	mq       RoomBroadcaster
 
 	registerCh   chan *Client
 	unregisterCh chan *Client
@@ -45,13 +46,14 @@ type roomBroadcast struct {
 	data   []byte
 }
 
-// NewHub 创建 WS 网关；传入 redis 时启用 Pub/Sub 多实例广播
+// NewHub 创建 WS 网关；mq 为 Kafka 广播；无 mq 时可用 Redis Pub/Sub 降级
 func NewHub(
 	sessions *repository.SessionRepo,
 	bids *repository.BidRepo,
 	snap *service.UserAuctionService,
 	bidSvc *service.BidService,
 	rdb *redisc.Client,
+	mq RoomBroadcaster,
 ) *Hub {
 	h := &Hub{
 		rooms:      make(map[string]*room),
@@ -60,6 +62,7 @@ func NewHub(
 		snap:       snap,
 		bidSvc:     bidSvc,
 		redis:      rdb,
+		mq:         mq,
 		limiter:    newBidRateLimiter(300 * time.Millisecond),
 		registerCh:   make(chan *Client),
 		unregisterCh: make(chan *Client),
@@ -67,19 +70,27 @@ func NewHub(
 	}
 	go h.run()
 	go h.runCountdownLoop()
-	if rdb != nil {
-		ctx, cancel := context.WithCancel(context.Background())
-		h.broadcastCancel = cancel
-		if err := rdb.StartRoomBroadcastSubscriber(ctx, h.onRedisBroadcast); err != nil {
+
+	ctx, cancel := context.WithCancel(context.Background())
+	h.broadcastCancel = cancel
+	switch {
+	case mq != nil:
+		if err := mq.StartSubscriber(ctx, h.onCrossInstanceBroadcast); err != nil {
+			log.Printf("ws: kafka subscriber: %v", err)
+		} else {
+			log.Printf("ws: kafka broadcast enabled (multi-instance)")
+		}
+	case rdb != nil:
+		if err := rdb.StartRoomBroadcastSubscriber(ctx, h.onCrossInstanceBroadcast); err != nil {
 			log.Printf("ws: redis broadcast subscriber: %v", err)
 		} else {
-			log.Printf("ws: redis pub/sub broadcast enabled (multi-instance)")
+			log.Printf("ws: redis pub/sub broadcast enabled (fallback)")
 		}
 	}
 	return h
 }
 
-func (h *Hub) onRedisBroadcast(roomID string, envelopeJSON []byte) {
+func (h *Hub) onCrossInstanceBroadcast(roomID string, envelopeJSON []byte) {
 	h.deliver(roomID, envelopeJSON)
 }
 
@@ -225,10 +236,17 @@ func (h *Hub) Publish(roomID, eventType string, payload any) uint64 {
 		if err != nil {
 			return seq
 		}
-		if err := h.redis.StoreAndPublishRoomEvent(ctx, roomID, b); err != nil {
-			log.Printf("ws: publish room event %s: %v", roomID, err)
+		if err := h.redis.StoreRoomEvent(ctx, roomID, b); err != nil {
+			log.Printf("ws: store room event %s: %v", roomID, err)
 		}
-		// 投递由 Pub/Sub 回调 onRedisBroadcast 完成（含本实例）
+		if h.mq != nil {
+			if err := h.mq.Publish(ctx, roomID, b); err != nil {
+				log.Printf("ws: kafka publish %s: %v", roomID, err)
+			}
+		} else if err := h.redis.PublishRoomBroadcast(ctx, roomID, b); err != nil {
+			log.Printf("ws: redis publish %s: %v", roomID, err)
+		}
+		// 投递由 Kafka / Redis 订阅回调 onCrossInstanceBroadcast 完成（含本实例）
 		return seq
 	}
 

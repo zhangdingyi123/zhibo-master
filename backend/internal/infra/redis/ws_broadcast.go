@@ -37,8 +37,8 @@ func (c *Client) CurrentRoomEventSeq(ctx context.Context, roomID string) (uint64
 	return uint64(n), nil
 }
 
-// StoreAndPublishRoomEvent 写入事件缓冲并 Pub/Sub 广播（所有 WS 实例订阅）
-func (c *Client) StoreAndPublishRoomEvent(ctx context.Context, roomID string, envelopeJSON []byte) error {
+// StoreRoomEvent 写入事件环形缓冲（多实例共享，供重连补偿）
+func (c *Client) StoreRoomEvent(ctx context.Context, roomID string, envelopeJSON []byte) error {
 	if len(envelopeJSON) == 0 {
 		return fmt.Errorf("empty envelope")
 	}
@@ -46,9 +46,12 @@ func (c *Client) StoreAndPublishRoomEvent(ctx context.Context, roomID string, en
 	pipe := c.rdb.Pipeline()
 	pipe.LPush(ctx, listKey, envelopeJSON)
 	pipe.LTrim(ctx, listKey, 0, roomEventBuffer-1)
-	if _, err := pipe.Exec(ctx); err != nil {
-		return err
-	}
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+// PublishRoomBroadcast Redis Pub/Sub 广播（无 Kafka 时的降级）
+func (c *Client) PublishRoomBroadcast(ctx context.Context, roomID string, envelopeJSON []byte) error {
 	return c.rdb.Publish(ctx, domain.RoomBroadcastChannel(roomID), envelopeJSON).Err()
 }
 

@@ -24,6 +24,9 @@ type Config struct {
 	AITTSModel   string
 	AITTSVoice   string
 	UploadDir    string
+	KafkaBrokers []string
+	KafkaTopic   string
+	InstanceID   string
 }
 
 func Load() Config {
@@ -55,6 +58,9 @@ func Load() Config {
 		AITTSModel:        getEnv("AI_TTS_MODEL", "tts-1"),
 		AITTSVoice:        getEnv("AI_TTS_VOICE", "nova"),
 		UploadDir:         getEnv("UPLOAD_DIR", "./uploads"),
+		KafkaBrokers:      parseCSV(getEnv("KAFKA_BROKERS", "")),
+		KafkaTopic:        getEnv("KAFKA_TOPIC", "zhibo.room.broadcast"),
+		InstanceID:        getEnv("INSTANCE_ID", ""),
 	}
 }
 

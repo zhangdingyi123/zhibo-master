@@ -4,75 +4,76 @@
 
 - Gin HTTP + Gorilla WebSocket 同进程
 - **多实例**：`zhibo-backend` + `zhibo-backend-2`，Nginx `upstream` 轮询
-- **跨实例广播**：Redis Pub/Sub `zhibo:room:{roomId}:broadcast`
-- **跨实例重连补偿**：Redis `INCR` 序号 + `LIST` 事件缓冲（`zhibo:room:{roomId}:events`）
+- **跨实例广播**：**Kafka**（Redpanda 单节点）Topic `zhibo.room.broadcast`
+- **重连补偿**：Redis `INCR` 序号 + `LIST` 事件缓冲（与广播解耦）
 - Redis：分布式锁 + 热数据缓存
 - MySQL：场次、出价持久化
 
-单房间 **100+ 并发出价** 由 Redis 锁 + DB 行锁串行化，压测脚本见 `backend/scripts/bid_stress.sh`。
+未配置 `KAFKA_BROKERS` 时，跨实例广播降级为 **Redis Pub/Sub**；无 Redis 时为单机内存 Hub。
 
-## 广播路径（已实现）
+## 广播路径（Kafka）
 
 ```
 REST 出价 / Notifier.Publish
         ↓
-  Redis INCR seq + LPUSH events + PUBLISH
+  Redis INCR seq + LPUSH events（重连用）
+        ↓
+  Kafka Produce（key=roomId, value=WS Envelope JSON）
         ↓
   ┌─────┴─────┐
   ▼           ▼
-Pod-1 Hub    Pod-2 Hub   （PSUBSCRIBE zhibo:room:*:broadcast）
+Pod-1         Pod-2   （各实例独立 Consumer Group → fan-out）
   ↓           ↓
-本机 WS 连接  本机 WS 连接
+本机 WS       本机 WS
 ```
 
-- **带 seq 事件**（出价、排名、成交等）：走 Pub/Sub，所有实例同步
-- **倒计时 tick**：仍由**各实例对本机有观众的房间**本地推送（避免多实例重复 fan-out）
+- **带 seq 事件**（出价、排名、成交）：Kafka 广播
+- **倒计时 tick**：各实例对本机有观众的房间本地推送
 
-Redis 不可用时自动回退：**内存 Hub 广播**（单实例模式）。
-
-## 部署双实例
+## 部署
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build backend backend-2 nginx
+# 全栈（含 Kafka + 双 backend）
+docker-compose -f docker-compose.prod.yml up -d --build
+
+# 仅更新后端与网关
+docker-compose -f docker-compose.prod.yml up -d --build kafka backend backend-2 nginx
 ```
 
-Nginx 已配置：
+### 环境变量
 
-```nginx
-upstream zhibo_backend {
-    server zhibo-backend:8081;
-    server zhibo-backend-2:8081;
-}
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `KAFKA_BROKERS` | `kafka:9092` | 逗号分隔 |
+| `KAFKA_TOPIC` | `zhibo.room.broadcast` | 房间事件 Topic |
+| `INSTANCE_ID` | hostname | 每实例唯一，用于 Consumer Group |
+
+## 验证
+
+```bash
+docker logs zhibo-backend 2>&1 | grep kafka
+# ws: kafka broadcast enabled (multi-instance)
+# kafka: ws subscriber started topic=zhibo.room.broadcast group=zhibo-ws-backend-1
+
+docker logs zhibo-backend-2 2>&1 | grep kafka
 ```
 
-客户端无需改动；多浏览器连到不同 Pod 时，出价后价格仍应同步。
+双浏览器同房间出价，跨 Pod 价格应同步。
 
-## 验证多实例广播
+## 容量参考
 
-1. 开两个浏览器进同一直播间（刷新多次或无痕，提高命中不同 Pod 概率）
-2. 一方出价，另一方价格应更新
-3. 查看日志：`ws: redis pub/sub broadcast enabled (multi-instance)`
-
-可选：分别 `docker logs zhibo-backend` / `zhibo-backend-2` 观察连接分布。
-
-## 1000+ WebSocket 连接（后续）
-
-| 指标 | 单 Pod 参考 | 扩展方式 |
-|------|-------------|----------|
-| WS 连接 | ~5k–10k | 增加 backend 副本 + 已有 Pub/Sub |
-| 单房间 QPS 出价 | ~200–500（锁串行） | 业务上合并出价批次（非课题范围） |
-| 读快照 | 10k+ QPS | Redis 集群 |
-
-### 可选增强
-
-- **Sticky Session**（`ip_hash`）：减少跨节点连接迁移，非必须
-- **Kafka/NATS**：房间数极大时可替换 Pub/Sub，当前 Redis 足够
+| 指标 | 单 Pod | 扩展 |
+|------|--------|------|
+| WS 连接 | ~5k–10k | 增加 backend 副本 |
+| 单房间出价 QPS | ~200–500 | Redis 锁串行 |
+| 广播 | Kafka Partition 按 roomId | 水平加 Consumer 实例 |
 
 ## 代码索引
 
 | 模块 | 路径 |
 |------|------|
-| Pub/Sub + 事件 LIST | `backend/internal/infra/redis/ws_broadcast.go` |
-| Hub 多实例 | `backend/internal/ws/hub.go` |
-| Redis Key | `backend/internal/domain/redis_keys.go` |
-| 双实例编排 | `docker-compose.prod.yml` → `backend-2` |
+| Kafka 广播 | `backend/internal/infra/kafka/broadcast.go` |
+| 广播接口 | `backend/internal/ws/broadcast.go` |
+| Hub | `backend/internal/ws/hub.go` |
+| Redis 事件缓冲 | `backend/internal/infra/redis/ws_broadcast.go` |
+| 编排 | `docker-compose.prod.yml` → `kafka`, `backend-2` |

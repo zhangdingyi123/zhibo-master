@@ -29,6 +29,35 @@ services:
       timeout: 3s
       retries: 20
 
+  # Kafka（Redpanda 单节点，WS 跨实例广播）
+  kafka:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.4
+    container_name: zhibo-kafka
+    hostname: kafka
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --memory
+      - "512M"
+      - --reserve-memory
+      - "0M"
+      - --overprovisioned
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://kafka:9092
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health", "--exit-code-on-error"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
   backend:
     build:
       context: ./backend
@@ -51,6 +80,9 @@ services:
       AI_TTS_MODEL: ${AI_TTS_MODEL:-tts-1}
       AI_TTS_VOICE: ${AI_TTS_VOICE:-nova}
       UPLOAD_DIR: /app/uploads
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-zhibo.room.broadcast}
+      INSTANCE_ID: backend-1
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -58,8 +90,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
 
-  # 第二 API/WS 实例：Redis Pub/Sub 跨节点房间广播（见 docs/scaling.md）
+  # 第二 API/WS 实例：Kafka 跨节点房间广播（见 docs/scaling.md）
   backend-2:
     build:
       context: ./backend
@@ -68,12 +102,15 @@ services:
     restart: unless-stopped
     environment:
       <<: *backend_env
+      INSTANCE_ID: backend-2
     volumes:
       - uploads_data:/app/uploads
     depends_on:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
   frontend:

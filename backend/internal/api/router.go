@@ -13,6 +13,7 @@ import (
 	"github.com/zhibo/backend/internal/api/handler"
 	"github.com/zhibo/backend/internal/api/middleware"
 	"github.com/zhibo/backend/internal/config"
+	"github.com/zhibo/backend/internal/infra/kafka"
 	redisc "github.com/zhibo/backend/internal/infra/redis"
 	"github.com/zhibo/backend/internal/repository"
 	"github.com/zhibo/backend/internal/service"
@@ -62,7 +63,18 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		rdb = opened
 		bidLocker = rdb
 		roomCache = service.NewRedisRoomCache(rdb, sessionRepo)
-		log.Printf("redis: connected %s (lock + room cache + ws pub/sub)", cfg.RedisAddr)
+		log.Printf("redis: connected %s (lock + room cache + event buffer)", cfg.RedisAddr)
+	}
+
+	var roomMQ ws.RoomBroadcaster
+	if len(cfg.KafkaBrokers) > 0 {
+		kb, err := kafka.NewRoomBroadcaster(cfg)
+		if err != nil {
+			log.Printf("kafka: %v (ws 将降级 redis pub/sub 或内存广播)", err)
+		} else {
+			roomMQ = kb
+			log.Printf("kafka: brokers=%v topic=%s instance=%s", cfg.KafkaBrokers, cfg.KafkaTopic, cfg.InstanceID)
+		}
 	}
 	auctionSvc := service.NewAuctionService(productRepo, sessionRepo, bidRepo, orderSvc)
 	auctionSvc.SetSessionLocker(bidLocker)
@@ -76,7 +88,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		liveRoomSvc.SetRoomCache(roomCache)
 	}
 
-	hub := ws.NewHub(sessionRepo, bidRepo, userAuctionSvc, bidSvc, rdb)
+	hub := ws.NewHub(sessionRepo, bidRepo, userAuctionSvc, bidSvc, rdb, roomMQ)
 	liveRoomSvc.SetRoomViewerCounter(hub)
 	wsNotifier := ws.NewNotifier(hub, bidRepo)
 	if roomCache != nil {
