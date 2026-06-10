@@ -172,6 +172,13 @@ export type AuctionSession = {
   roomId: string
   status: SessionStatus
   currentPrice: number
+  bidCount: number
+  participantCount: number
+  winnerId?: number
+  scheduledStartAt?: string
+  startedAt?: string
+  endAt?: string
+  settledAt?: string
 }
 
 export type WsErrorPayload = {

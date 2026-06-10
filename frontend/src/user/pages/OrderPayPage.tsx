@@ -55,7 +55,7 @@ export function OrderPayPage() {
   const [savingAddress, setSavingAddress] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [cancelling, setCancelling] = useState(false)
-  const [cancelReason, setCancelReason] = useState(AFTERSALE_REASON_PRESETS[1])
+  const [cancelReason, setCancelReason] = useState<string>(AFTERSALE_REASON_PRESETS[1])
   const [error, setError] = useState<string | null>(null)
   const [receiverName, setReceiverName] = useState('')
   const [receiverPhone, setReceiverPhone] = useState('')

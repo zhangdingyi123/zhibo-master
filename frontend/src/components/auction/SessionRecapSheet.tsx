@@ -14,7 +14,7 @@ type Props = {
 /** 连播房间内回看已拍场次，无需离开直播间 */
 export function SessionRecapSheet({ sessionId, onClose }: Props) {
   const [detail, setDetail] = useState<UserAuctionDetail | null>(null)
-  const [order, setOrder] = useState<OrderListItem | null>(null)
+  const [orderItem, setOrderItem] = useState<OrderListItem | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -24,7 +24,7 @@ export function SessionRecapSheet({ sessionId, onClose }: Props) {
   useEffect(() => {
     if (!sessionId) {
       setDetail(null)
-      setOrder(null)
+      setOrderItem(null)
       setError(null)
       return
     }
@@ -38,7 +38,7 @@ export function SessionRecapSheet({ sessionId, onClose }: Props) {
         setDetail(d)
         if (isLoggedIn() && d.session.winnerId === getUser()?.id) {
           return getOrderBySession(sessionId).then((item) => {
-            if (!cancelled) setOrder(item.order)
+            if (!cancelled) setOrderItem(item)
           })
         }
         return undefined
@@ -105,18 +105,18 @@ export function SessionRecapSheet({ sessionId, onClose }: Props) {
               )}
             </dl>
 
-            {isWinner && order?.status === 'pending_pay' && (
+            {isWinner && orderItem?.order.status === 'pending_pay' && (
               <Link
-                to={`/app/orders/${order.id}`}
+                to={`/app/orders/${orderItem.order.id}`}
                 className="btn-primary btn-block"
                 onClick={onClose}
               >
-                去支付 {formatCents(order.amount)}
+                去支付 {formatCents(orderItem.order.amount)}
               </Link>
             )}
-            {isWinner && order && order.status !== 'pending_pay' && (
+            {isWinner && orderItem && orderItem.order.status !== 'pending_pay' && (
               <Link
-                to={`/app/orders/${order.id}`}
+                to={`/app/orders/${orderItem.order.id}`}
                 className="btn-secondary btn-block"
                 onClick={onClose}
               >
