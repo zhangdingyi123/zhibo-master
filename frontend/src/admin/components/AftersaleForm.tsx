@@ -19,7 +19,7 @@ export function AftersaleForm({
   onSubmit,
 }: Props) {
   const [preset, setPreset] = useState<string>(AFTERSALE_REASON_PRESETS[0])
-  const [reason, setReason] = useState(AFTERSALE_REASON_PRESETS[0])
+  const [reason, setReason] = useState<string>(AFTERSALE_REASON_PRESETS[0])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
