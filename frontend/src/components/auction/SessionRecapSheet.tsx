@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getAuction, getOrderBySession } from '../../api/user'
 import type { UserAuctionDetail } from '../../api/user'
-import type { OrderListItem, Order } from '../../api/types'
+import type { OrderListItem } from '../../api/types'
 import { getUser, isLoggedIn } from '../../auth/session'
 import { formatCents } from '../../utils/money'
 
@@ -14,7 +14,7 @@ type Props = {
 /** 连播房间内回看已拍场次，无需离开直播间 */
 export function SessionRecapSheet({ sessionId, onClose }: Props) {
   const [detail, setDetail] = useState<UserAuctionDetail | null>(null)
-  const [orderItem, setOrderItem] = useState<OrderListItem | Order | null>(null)
+  const [orderItem, setOrderItem] = useState<OrderListItem | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -105,18 +105,18 @@ export function SessionRecapSheet({ sessionId, onClose }: Props) {
               )}
             </dl>
 
-            {isWinner && (orderItem as OrderListItem)?.order?.status === 'pending_pay' && (
+            {isWinner && orderItem?.order.status === 'pending_pay' && (
               <Link
-                to={`/app/orders/${(orderItem as OrderListItem).order.id}`}
+                to={`/app/orders/${orderItem.order.id}`}
                 className="btn-primary btn-block"
                 onClick={onClose}
               >
-                去支付 {formatCents((orderItem as OrderListItem).order.amount)}
+                去支付 {formatCents(orderItem.order.amount)}
               </Link>
             )}
-            {isWinner && orderItem && (orderItem as OrderListItem).order.status !== 'pending_pay' && (
+            {isWinner && orderItem && orderItem.order.status !== 'pending_pay' && (
               <Link
-                to={`/app/orders/${(orderItem as OrderListItem).order.id}`}
+                to={`/app/orders/${orderItem.order.id}`}
                 className="btn-secondary btn-block"
                 onClick={onClose}
               >

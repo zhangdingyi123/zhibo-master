@@ -109,7 +109,7 @@ export function LiveRoomPage() {
       setDescription(p.description)
       setCoverUrl(p.coverUrl)
       setSessionId(s.id)
-      setScheduledStartAt((s as any).scheduledStartAt ?? s.scheduledStartAt)
+      setScheduledStartAt(s.scheduledStartAt)
     }
     setStripItems(items.sort((a, b) => a.seqInRoom - b.seqInRoom))
   }, [])
