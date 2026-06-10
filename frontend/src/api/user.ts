@@ -66,9 +66,17 @@ export function getAuction(sessionId: number) {
   return userApiRequest<UserAuctionDetail>(`/auctions/${sessionId}`)
 }
 
+export interface AnchorBrief {
+  id: number
+  nickname: string
+  avatar: string
+  followerCount: number
+}
+
 export interface UserLiveRoomDetail {
   roomId: string
   liveRoom: LiveRoom
+  anchor?: AnchorBrief
   current?: UserAuctionDetail
   history: SessionSummary[]
 }

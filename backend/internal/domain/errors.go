@@ -63,4 +63,8 @@ var (
 	ErrUploadFileTooLarge  = errors.New("图片大小不能超过 5MB")
 	ErrUploadInvalidType   = errors.New("仅支持 JPG、PNG、GIF、WebP 图片")
 	ErrUploadFailed        = errors.New("图片上传失败")
+
+	ErrCommentEmpty   = errors.New("评论不能为空")
+	ErrCommentTooLong = errors.New("评论不能超过 200 字")
+	ErrCannotFollowSelf = errors.New("不能关注自己")
 )

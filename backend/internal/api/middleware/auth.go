@@ -127,3 +127,13 @@ func CurrentUser(c *gin.Context) *domain.User {
 	u, _ := c.MustGet(ctxUserKey).(*domain.User)
 	return u
 }
+
+// TryCurrentUser 可选登录场景下尝试取当前用户
+func TryCurrentUser(c *gin.Context) (*domain.User, bool) {
+	u, ok := c.Get(ctxUserKey)
+	if !ok {
+		return nil, false
+	}
+	user, ok := u.(*domain.User)
+	return user, ok && user != nil
+}

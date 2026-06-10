@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { getToken, getUser, isLoggedIn } from '../../auth/session'
+import { listRoomComments, type AnchorBrief, type RoomSocialStats } from '../../api/social'
 import { useAuctionNotifications } from '../../hooks/useAuctionNotifications'
 import { useBidThrottle } from '../../hooks/useBidThrottle'
 import { useAuctionSocket } from '../../ws'
-import { EventSessionSwitch, type SettledPayload } from '../../ws/types'
+import {
+  EventLikeUpdate,
+  EventSessionSwitch,
+  type LikeUpdatePayload,
+  type SettledPayload,
+} from '../../ws/types'
 import { connectionLabel } from '../../utils/connectionLabel'
 import { useSoundEnabled } from '../../hooks/useSoundEnabled'
 import { ChevronLeftIcon, SoundOffIcon, SoundOnIcon } from '../icons/NavIcons'
 import { BidPanel } from './BidPanel'
 import { LiveDanmaku } from './LiveDanmaku'
+import { LiveHostBar } from './LiveHostBar'
+import { LiveInteractionDock } from './LiveInteractionDock'
 import { LivePriceBoard } from './LivePriceBoard'
-import { LiveReactions } from './LiveReactions'
 import { LiveVideo } from './LiveVideo'
 import { NextUpBanner } from './NextUpBanner'
 import { RankLeaderboard } from './RankLeaderboard'
@@ -29,9 +36,13 @@ import { useProductNarration } from '../../hooks/useProductNarration'
 type Props = {
   roomId?: string
   sessionId?: number
+  productId?: number
   productTitle?: string
   productDescription?: string
   coverUrl?: string
+  liveRoomTitle?: string
+  anchor?: AnchorBrief | null
+  roomStats?: RoomSocialStats | null
   scheduledStartAt?: string
   multiSku?: boolean
   stripItems?: SessionSummary[]
@@ -42,9 +53,13 @@ type Props = {
 export function AuctionLiveRoom({
   roomId: roomIdProp = 'room_sess_1',
   sessionId,
+  productId,
   productTitle,
   productDescription,
   coverUrl,
+  liveRoomTitle,
+  anchor,
+  roomStats,
   scheduledStartAt,
   multiSku = false,
   stripItems = [],
@@ -55,15 +70,41 @@ export function AuctionLiveRoom({
   const location = useLocation()
   const loginReturnTo = `${location.pathname}${location.search}`
   const [roomId, setRoomId] = useState(roomIdProp)
-  const [rankOpen, setRankOpen] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(min-width: 520px)').matches : false,
-  )
+  const [rankOpen, setRankOpen] = useState(false)
+  const [likeCount, setLikeCount] = useState(roomStats?.likeCount ?? 0)
+  const [isFollowing, setIsFollowing] = useState(roomStats?.isFollowing ?? false)
+  const [isFavorited, setIsFavorited] = useState(roomStats?.isFavorited ?? false)
+  const [seedComments, setSeedComments] = useState<
+    { id: number; nickname: string; content: string }[]
+  >([])
   const user = getUser()
   const token = getToken()
 
   useEffect(() => {
     setRoomId(roomIdProp)
   }, [roomIdProp])
+
+  useEffect(() => {
+    if (roomStats) {
+      setLikeCount(roomStats.likeCount)
+      setIsFollowing(roomStats.isFollowing ?? false)
+      setIsFavorited(roomStats.isFavorited ?? false)
+    }
+  }, [roomStats])
+
+  useEffect(() => {
+    if (!roomId) return
+    listRoomComments(roomId)
+      .then((res) =>
+        setSeedComments(
+          res.items
+            .filter((c) => !c.isHidden)
+            .slice(0, 12)
+            .map((c) => ({ id: c.id, nickname: c.nickname, content: c.content })),
+        ),
+      )
+      .catch(() => {})
+  }, [roomId])
 
   const {
     connectionState,
@@ -83,6 +124,13 @@ export function AuctionLiveRoom({
     enabled: Boolean(roomId),
     onSessionSwitch,
   })
+
+  useEffect(() => {
+    if (lastEvent?.type === EventLikeUpdate) {
+      const p = lastEvent.payload as LikeUpdatePayload | undefined
+      if (p?.likeCount != null) setLikeCount(p.likeCount)
+    }
+  }, [lastEvent])
 
   const currentUserId = user?.id ?? null
   const needsReconnect =
@@ -190,55 +238,90 @@ export function AuctionLiveRoom({
   const displayError = lastError?.message ?? throttleHint
 
   return (
-    <div className={`live-room ${outbidFlash ? 'live-room--outbid' : ''}`}>
-      <header className="live-room__header">
-        <Link to="/app" className="live-room__back" aria-label="返回列表">
-          <ChevronLeftIcon />
-        </Link>
-        <div className="live-room__title-wrap">
-          <h1 className="live-room__title">{productTitle ?? '直播间竞拍'}</h1>
-          <span
-            className={`live-room__conn conn-badge`}
-            data-state={connectionState}
-          >
-            {connectionLabel(connectionState)}
-          </span>
-        </div>
-        <div className="live-room__toolbar">
-          <button
-            type="button"
-            className={`btn-icon btn-icon--sm${soundEnabled ? '' : ' btn-icon--muted'}`}
-            onClick={toggleSound}
-            aria-label={soundEnabled ? '关闭提示音' : '开启提示音'}
-            title={soundEnabled ? '提示音开' : '提示音关'}
-          >
-            {soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
-          </button>
-          <button
-            type="button"
-            className={`btn-ghost btn-sm live-room__narration${narrationEnabled ? ' live-room__narration--on' : ''}`}
-            onClick={toggleNarration}
-            aria-pressed={narrationEnabled}
-            title={narrationEnabled ? 'AI 语音解说开' : 'AI 语音解说关'}
-          >
-            {narrationEnabled ? '解说开' : '解说关'}
-          </button>
-          {isLoggedIn() && user ? (
-            <span className="live-room__user muted" title={user.nickname}>
-              {user.nickname}
-            </span>
-          ) : (
-            <Link to="/app/login" state={{ from: loginReturnTo }} className="btn-ghost btn-sm">
-              登录
+    <div className={`live-room live-room--v2 ${outbidFlash ? 'live-room--outbid' : ''}`}>
+      <div className="live-room__stage">
+        <div className="live-room__video-wrap">
+          <LiveVideo
+            title={productTitle}
+            coverUrl={coverUrl}
+            viewerCount={snapshot?.participantCount}
+          />
+          <div className="live-room__overlay-top">
+            <Link to="/app" className="live-room__back live-room__back--float" aria-label="返回列表">
+              <ChevronLeftIcon />
             </Link>
-          )}
-          {needsReconnect && (
-            <button type="button" className="btn-ghost btn-sm" onClick={reconnect}>
-              重连
-            </button>
+            <LiveHostBar
+              anchor={anchor}
+              liveTitle={liveRoomTitle ?? productTitle}
+              isFollowing={isFollowing}
+              loginReturnTo={loginReturnTo}
+              onFollowChange={setIsFollowing}
+            />
+            <div className="live-room__overlay-tools">
+              <span
+                className="live-room__conn conn-badge live-room__conn--float"
+                data-state={connectionState}
+              >
+                {connectionLabel(connectionState)}
+              </span>
+              <button
+                type="button"
+                className={`btn-icon btn-icon--sm btn-icon--glass${soundEnabled ? '' : ' btn-icon--muted'}`}
+                onClick={toggleSound}
+                aria-label={soundEnabled ? '关闭提示音' : '开启提示音'}
+              >
+                {soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
+              </button>
+              <button
+                type="button"
+                className={`btn-ghost btn-sm live-room__narration live-room__narration--float${narrationEnabled ? ' live-room__narration--on' : ''}`}
+                onClick={toggleNarration}
+                aria-pressed={narrationEnabled}
+              >
+                {narrationEnabled ? '解说' : '解说'}
+              </button>
+            </div>
+          </div>
+          <LiveDanmaku
+            lastEvent={lastEvent}
+            seedComments={seedComments}
+          />
+          <AICommentaryBar
+            line={currentLine}
+            visible={hasLines}
+            voiceOn={narrationEnabled}
+          />
+        </div>
+
+        {multiSku && stripItems.length > 0 && (
+          <ProductStrip
+            items={stripItems}
+            currentSessionId={snapshot?.sessionId ?? sessionId}
+            onSelect={handleStripSelect}
+          />
+        )}
+
+        <div className="live-room__auction-panel">
+          <LivePriceBoard snapshot={snapshot} connectionState={connectionState} />
+          <button
+            type="button"
+            className="live-room__rank-toggle"
+            aria-expanded={rankOpen}
+            onClick={() => setRankOpen((v) => !v)}
+          >
+            {rankOpen ? '收起排名' : `实时排名 · ${snapshot?.participantCount ?? 0} 人参与`}
+          </button>
+          {rankOpen && (
+            <div className="live-room__rank-sheet">
+              <RankLeaderboard
+                items={rank}
+                currentUserId={currentUserId}
+                participantCount={snapshot?.participantCount ?? 0}
+              />
+            </div>
           )}
         </div>
-      </header>
+      </div>
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
 
@@ -250,61 +333,11 @@ export function AuctionLiveRoom({
         />
       )}
 
-      {multiSku && stripItems.length > 0 && (
-        <ProductStrip
-          items={stripItems}
-          currentSessionId={snapshot?.sessionId ?? sessionId}
-          onSelect={handleStripSelect}
-        />
-      )}
-
       {scheduledStartAt && snapshot?.status === 'pending' && (
         <ScheduledStartBanner scheduledStartAt={scheduledStartAt} />
       )}
 
-      <div className="live-room__body">
-        <div className="live-room__main">
-          <div className="live-room__video-wrap">
-            <LiveVideo
-              title={productTitle}
-              coverUrl={coverUrl}
-              viewerCount={snapshot?.participantCount}
-            />
-            <LiveDanmaku
-              lastEvent={lastEvent}
-              participantCount={snapshot?.participantCount ?? 0}
-            />
-            <AICommentaryBar
-              line={currentLine}
-              visible={hasLines}
-              voiceOn={narrationEnabled}
-            />
-            <LiveReactions />
-          </div>
-          <LivePriceBoard snapshot={snapshot} connectionState={connectionState} />
-          <button
-            type="button"
-            className="live-room__rank-toggle"
-            aria-expanded={rankOpen}
-            onClick={() => setRankOpen((v) => !v)}
-          >
-            {rankOpen ? '收起排名' : `查看排名 (${snapshot?.participantCount ?? 0})`}
-          </button>
-        </div>
-
-        <aside
-          className={`live-room__side${rankOpen ? ' live-room__side--open' : ''}`}
-          aria-hidden={!rankOpen}
-        >
-          <RankLeaderboard
-            items={rank}
-            currentUserId={currentUserId}
-            participantCount={snapshot?.participantCount ?? 0}
-          />
-        </aside>
-      </div>
-
-      <footer className="live-room__footer">
+      <footer className="live-room__footer live-room__footer--v2">
         {multiSku && winnerBar && (
           <WinnerPayBar
             amount={winnerBar.amount}
@@ -313,6 +346,18 @@ export function AuctionLiveRoom({
             onDismiss={() => setWinnerBar(null)}
           />
         )}
+        <LiveInteractionDock
+          roomId={roomId}
+          productId={productId}
+          likeCount={likeCount}
+          isFavorited={isFavorited}
+          loginReturnTo={loginReturnTo}
+          onLikeCount={setLikeCount}
+          onFavoriteChange={setIsFavorited}
+          onCommentSent={() => {
+            /* danmaku picks up via WS comment.new */
+          }}
+        />
         <BidPanel
           snapshot={snapshot}
           canBid={canBid}
@@ -325,6 +370,20 @@ export function AuctionLiveRoom({
           multiSku={multiSku}
           onBid={handleBid}
         />
+        <div className="live-room__footer-meta">
+          {isLoggedIn() && user ? (
+            <span className="muted">{user.nickname}</span>
+          ) : (
+            <Link to="/app/login" state={{ from: loginReturnTo }} className="btn-ghost btn-sm">
+              登录出价
+            </Link>
+          )}
+          {needsReconnect && (
+            <button type="button" className="btn-ghost btn-sm" onClick={reconnect}>
+              重连
+            </button>
+          )}
+        </div>
       </footer>
 
       {multiSku && (

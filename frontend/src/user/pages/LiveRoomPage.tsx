@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getAuction, getLiveRoom, type UserLiveRoomDetail } from '../../api/user'
+import { getRoomStats, type RoomSocialStats } from '../../api/social'
+import type { AnchorBrief } from '../../api/social'
 import type { SessionSummary } from '../../api/types'
 import { AuctionLiveRoom } from '../../components/auction/AuctionLiveRoom'
 import type { SessionSwitchPayload } from '../../ws/types'
@@ -40,6 +42,10 @@ export function LiveRoomPage() {
     sessionIdParam ? Number(sessionIdParam) : undefined,
   )
   const [scheduledStartAt, setScheduledStartAt] = useState<string | undefined>()
+  const [anchor, setAnchor] = useState<AnchorBrief | null>(null)
+  const [liveRoomTitle, setLiveRoomTitle] = useState<string | undefined>()
+  const [productId, setProductId] = useState<number | undefined>()
+  const [roomStats, setRoomStats] = useState<RoomSocialStats | null>(null)
 
   const multiSku = Boolean(roomId?.startsWith('room_live_'))
 
@@ -51,13 +57,20 @@ export function LiveRoomPage() {
         if (cancelled) return
         setRoomDetail(d)
         setStripItems(buildStripItems(d))
+        setAnchor(d.anchor ?? null)
+        setLiveRoomTitle(d.liveRoom.title)
         if (d.current) {
           setTitle(d.current.product.name)
           setDescription(d.current.product.description)
           setCoverUrl(d.current.product.coverUrl)
           setSessionId(d.current.session.id)
+          setProductId(d.current.product.id)
           setScheduledStartAt(d.current.session.scheduledStartAt)
         }
+        return getRoomStats(roomId, d.current?.product.id)
+      })
+      .then((stats) => {
+        if (!cancelled && stats) setRoomStats(stats)
       })
       .catch(() => {
         const id = sessionIdParam ? Number(sessionIdParam) : NaN
@@ -109,10 +122,14 @@ export function LiveRoomPage() {
       setDescription(p.description)
       setCoverUrl(p.coverUrl)
       setSessionId(s.id)
+      setProductId(p.id)
       setScheduledStartAt(s.scheduledStartAt)
+      if (roomId) {
+        void getRoomStats(roomId, p.id).then(setRoomStats).catch(() => {})
+      }
     }
     setStripItems(items.sort((a, b) => a.seqInRoom - b.seqInRoom))
-  }, [])
+  }, [roomId])
 
   const handleItemSettled = useCallback(
     (sid: number, finalPrice: number, winnerId?: number) => {
@@ -136,9 +153,13 @@ export function LiveRoomPage() {
     <AuctionLiveRoom
       roomId={roomId ?? 'room_sess_1'}
       sessionId={currentSessionId}
+      productId={productId}
       productTitle={title}
       productDescription={description}
       coverUrl={coverUrl}
+      liveRoomTitle={liveRoomTitle}
+      anchor={anchor}
+      roomStats={roomStats}
       scheduledStartAt={scheduledStartAt}
       multiSku={multiSku}
       stripItems={stripItems}

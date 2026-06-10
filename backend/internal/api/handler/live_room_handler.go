@@ -139,6 +139,55 @@ func (h *LiveRoomHandler) AddSession(c *gin.Context) {
 	response.Created(c, session)
 }
 
+func (h *LiveRoomHandler) AddSessionsBatch(c *gin.Context) {
+	liveRoomID, err := parseID(c.Param("id"))
+	if err != nil {
+		response.Fail(c, domain.ErrNotFound)
+		return
+	}
+
+	var body struct {
+		ProductIDs         []uint64 `json:"productIds" binding:"required,min=1"`
+		StartingPrice      int64    `json:"startingPrice"`
+		BidIncrement       int64    `json:"bidIncrement" binding:"required"`
+		CapPrice           *int64   `json:"capPrice"`
+		DurationSec        uint32   `json:"durationSec" binding:"required"`
+		ExtendThresholdSec uint32   `json:"extendThresholdSec"`
+		ExtendSec          uint32   `json:"extendSec"`
+		ScheduledStartAt   string   `json:"scheduledStartAt"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, domain.ErrInvalidBidIncrement)
+		return
+	}
+
+	rules, scheduled, err := parseAuctionRulesBody(publishAuctionBody{
+		StartingPrice:      body.StartingPrice,
+		BidIncrement:       body.BidIncrement,
+		CapPrice:           body.CapPrice,
+		DurationSec:        body.DurationSec,
+		ExtendThresholdSec: body.ExtendThresholdSec,
+		ExtendSec:          body.ExtendSec,
+		ScheduledStartAt:   body.ScheduledStartAt,
+	})
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+
+	user := middleware.CurrentUser(c)
+	sessions, err := h.svc.AddSessionsBatch(c.Request.Context(), user.ID, liveRoomID, service.BatchAddSessionsInput{
+		ProductIDs:       body.ProductIDs,
+		Rules:            rules,
+		ScheduledStartAt: scheduled,
+	})
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.Created(c, gin.H{"items": sessions, "count": len(sessions)})
+}
+
 func (h *LiveRoomHandler) EndCurrentAndSwitch(c *gin.Context) {
 	id, err := parseID(c.Param("id"))
 	if err != nil {

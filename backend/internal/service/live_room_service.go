@@ -21,6 +21,8 @@ type LiveRoomService struct {
 	sessions  *repository.SessionRepo
 	products  *repository.ProductRepo
 	orders    *repository.OrderRepo
+	users     *repository.UserRepo
+	social    *repository.SocialRepo
 	auction   *AuctionService
 	cache     RoomCache
 	notify    RoomNotifier
@@ -44,9 +46,11 @@ func NewLiveRoomService(
 	}
 }
 
-func (s *LiveRoomService) SetRoomCache(c RoomCache)            { s.cache = c }
-func (s *LiveRoomService) SetRoomNotifier(n RoomNotifier)      { s.notify = n }
+func (s *LiveRoomService) SetRoomCache(c RoomCache)                 { s.cache = c }
+func (s *LiveRoomService) SetRoomNotifier(n RoomNotifier)           { s.notify = n }
 func (s *LiveRoomService) SetRoomViewerCounter(v RoomViewerCounter) { s.viewers = v }
+func (s *LiveRoomService) SetUserRepo(u *repository.UserRepo)       { s.users = u }
+func (s *LiveRoomService) SetSocialRepo(social *repository.SocialRepo) { s.social = social }
 
 type CreateLiveRoomInput struct {
 	Title string
@@ -83,6 +87,7 @@ type LiveRoomDetail struct {
 type UserLiveRoomDetail struct {
 	RoomID         string                `json:"roomId"`
 	LiveRoom       domain.LiveRoom       `json:"liveRoom"`
+	Anchor         *AnchorBrief          `json:"anchor,omitempty"`
 	Current        *UserAuctionDetail    `json:"current,omitempty"`
 	History        []SessionSummary      `json:"history"`
 }
@@ -139,6 +144,7 @@ func (s *LiveRoomService) GetUserDetail(ctx context.Context, roomID string) (*Us
 		LiveRoom: *lr,
 		History:  []SessionSummary{},
 	}
+	out.Anchor = s.buildAnchorBrief(ctx, lr.AnchorID)
 
 	for _, sess := range sessions {
 		p, err := s.products.GetByID(ctx, sess.ProductID)
@@ -272,6 +278,51 @@ func (s *LiveRoomService) AddSession(ctx context.Context, anchorID, liveRoomID u
 		}
 	}
 	return session, nil
+}
+
+type BatchAddSessionsInput struct {
+	ProductIDs       []uint64
+	Rules            domain.AuctionRules
+	ScheduledStartAt *time.Time
+}
+
+// AddSessionsBatch 批量将多个商品加入直播队列（共用同一套竞拍规则）
+func (s *LiveRoomService) AddSessionsBatch(ctx context.Context, anchorID, liveRoomID uint64, in BatchAddSessionsInput) ([]domain.AuctionSession, error) {
+	if len(in.ProductIDs) == 0 {
+		return nil, domain.ErrInvalidProductName
+	}
+	var out []domain.AuctionSession
+	for _, pid := range in.ProductIDs {
+		sess, err := s.AddSession(ctx, anchorID, liveRoomID, AddSessionToLiveRoomInput{
+			ProductID:        pid,
+			Rules:            in.Rules,
+			ScheduledStartAt: in.ScheduledStartAt,
+		})
+		if err != nil {
+			return out, err
+		}
+		out = append(out, *sess)
+	}
+	return out, nil
+}
+
+func (s *LiveRoomService) buildAnchorBrief(ctx context.Context, anchorID uint64) *AnchorBrief {
+	if s.users == nil {
+		return nil
+	}
+	u, err := s.users.GetByID(ctx, anchorID)
+	if err != nil {
+		return nil
+	}
+	brief := &AnchorBrief{
+		ID:       u.ID,
+		Nickname: u.Nickname,
+		Avatar:   u.Avatar,
+	}
+	if s.social != nil {
+		brief.FollowerCount, _ = s.social.CountFollowers(ctx, anchorID)
+	}
+	return brief
 }
 
 // EndCurrentAndSwitch 结束当前品并切换到队列中下一 pending 场次
@@ -521,7 +572,7 @@ func (s *LiveRoomService) getUserDetailLegacy(ctx context.Context, roomID string
 	if err != nil {
 		return nil, err
 	}
-	return &UserLiveRoomDetail{
+	out := &UserLiveRoomDetail{
 		RoomID: roomID,
 		LiveRoom: domain.LiveRoom{
 			RoomID: roomID,
@@ -529,5 +580,7 @@ func (s *LiveRoomService) getUserDetailLegacy(ctx context.Context, roomID string
 		},
 		Current: current,
 		History: []SessionSummary{},
-	}, nil
+	}
+	out.Anchor = s.buildAnchorBrief(ctx, sess.AnchorID)
+	return out, nil
 }

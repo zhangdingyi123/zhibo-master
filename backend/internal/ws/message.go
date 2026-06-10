@@ -31,6 +31,9 @@ const (
 	EventAuctionSettled  = "auction.settled"
 	EventAuctionCancelled = "auction.cancelled"
 	EventSessionSwitch    = "session.switch"
+	EventCommentNew       = "comment.new"
+	EventLikeUpdate       = "like.update"
+	EventCommentHidden    = "comment.hidden"
 )
 
 // Envelope 统一消息信封

@@ -17,6 +17,9 @@ export const EventAuctionExtended = 'auction.extended'
 export const EventAuctionSettled = 'auction.settled'
 export const EventAuctionCancelled = 'auction.cancelled'
 export const EventSessionSwitch = 'session.switch'
+export const EventCommentNew = 'comment.new'
+export const EventLikeUpdate = 'like.update'
+export const EventCommentHidden = 'comment.hidden'
 
 export type ConnectionState =
   | 'idle'
@@ -179,6 +182,22 @@ export type AuctionSession = {
   startedAt?: string
   endAt?: string
   settledAt?: string
+}
+
+export type RoomCommentPayload = {
+  comment: {
+    id: number
+    roomId: string
+    userId: number
+    nickname: string
+    avatar: string
+    content: string
+    createdAt: string
+  }
+}
+
+export type LikeUpdatePayload = {
+  likeCount: number
 }
 
 export type WsErrorPayload = {

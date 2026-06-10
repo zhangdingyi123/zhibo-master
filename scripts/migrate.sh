@@ -111,6 +111,10 @@ run_file_if_needed \
   "backend/migrations/007_order_aftersale.sql" \
   "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='orders' AND COLUMN_NAME='cancel_reason'"
 
+run_file_if_needed \
+  "backend/migrations/008_social.sql" \
+  "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='room_comments'"
+
 echo ""
 echo "==> 迁移校验"
 mysql_exec -e "

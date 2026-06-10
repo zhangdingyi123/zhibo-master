@@ -2,13 +2,18 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   addSessionToLiveRoom,
+  addSessionsBatchToLiveRoom,
   cancelAuction,
+  createProduct,
   endCurrentAndSwitch,
   endLiveRoom,
   getLiveRoom,
+  hideRoomComment,
   listProducts,
+  listRoomCommentsAdmin,
   startLiveRoom,
 } from '../../api/admin'
+import type { RoomComment } from '../../api/social'
 import type { LiveRoomDetail, ProductView, PublishAuctionBody } from '../../api/types'
 import { formatCents } from '../../utils/money'
 import { formatRemainingMs } from '../../utils/time'
@@ -23,6 +28,10 @@ export function LiveRoomConsolePage() {
   const [detail, setDetail] = useState<LiveRoomDetail | null>(null)
   const [products, setProducts] = useState<ProductView[]>([])
   const [productId, setProductId] = useState<number | ''>('')
+  const [batchIds, setBatchIds] = useState<number[]>([])
+  const [comments, setComments] = useState<RoomComment[]>([])
+  const [quickName, setQuickName] = useState('')
+  const [quickPrice, setQuickPrice] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [showEmergency, setShowEmergency] = useState(false)
@@ -64,13 +73,28 @@ export function LiveRoomConsolePage() {
     }
   }, [liveRoomId])
 
+  const refreshComments = useCallback(async () => {
+    if (!roomId) return
+    try {
+      const res = await listRoomCommentsAdmin(roomId)
+      setComments(res.items)
+    } catch {
+      /* ignore */
+    }
+  }, [roomId])
+
   useEffect(() => {
     if (!liveRoomId || detail?.liveRoom.status !== 'live') return
     const id = window.setInterval(() => {
       void refresh()
+      void refreshComments()
     }, 15_000)
     return () => clearInterval(id)
-  }, [liveRoomId, detail?.liveRoom.status, refresh])
+  }, [liveRoomId, detail?.liveRoom.status, refresh, refreshComments])
+
+  useEffect(() => {
+    if (roomId) void refreshComments()
+  }, [roomId, refreshComments])
 
   if (!liveRoomId) {
     return <p className="form-error">无效的直播 ID</p>
@@ -308,7 +332,100 @@ export function LiveRoomConsolePage() {
           </section>
 
           <section className="admin-card">
-            <h3>添加商品到队列</h3>
+            <h3>直播中快速上架</h3>
+            <p className="muted">创建简易商品并自动上架，可立即加入连拍队列</p>
+            <div className="live-room-quick-create">
+              <input
+                value={quickName}
+                onChange={(e) => setQuickName(e.target.value)}
+                placeholder="商品名称"
+              />
+              <input
+                value={quickPrice}
+                onChange={(e) => setQuickPrice(e.target.value)}
+                placeholder="起拍价（元）"
+                inputMode="decimal"
+              />
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={busy || !quickName.trim()}
+                onClick={() =>
+                  runAction(async () => {
+                    const yuan = parseFloat(quickPrice) || 1
+                    const p = await createProduct({
+                      name: quickName.trim(),
+                      description: `${quickName.trim()} — 直播专场`,
+                      coverUrl: '',
+                      images: [],
+                    })
+                    const cents = Math.round(yuan * 100)
+                    await addSessionToLiveRoom(liveRoomId, {
+                      productId: p.id,
+                      startingPrice: cents,
+                      bidIncrement: Math.max(100, Math.round(cents * 0.1)),
+                      durationSec: 120,
+                      extendThresholdSec: 10,
+                      extendSec: 15,
+                    })
+                    setQuickName('')
+                    setQuickPrice('')
+                    const pRes = await listProducts({ page: 1, pageSize: 100, status: 'listed' })
+                    setProducts(pRes.items)
+                  })
+                }
+              >
+                创建并加队列
+              </button>
+            </div>
+          </section>
+
+          <section className="admin-card">
+            <h3>批量添加商品到队列</h3>
+            <p className="muted">勾选多个已上架商品，共用一套竞拍规则一次性入队</p>
+            <ul className="live-room-batch-list">
+              {products.map((p) => (
+                <li key={p.id}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={batchIds.includes(p.id)}
+                      onChange={(e) => {
+                        setBatchIds((prev) =>
+                          e.target.checked
+                            ? [...prev, p.id]
+                            : prev.filter((id) => id !== p.id),
+                        )
+                      }}
+                    />
+                    {p.name}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            {batchIds.length > 0 && (
+              <AuctionRulesForm
+                submitLabel={`批量加入 (${batchIds.length} 件)`}
+                onSubmit={async (values) => {
+                  await addSessionsBatchToLiveRoom(liveRoomId, {
+                    productIds: batchIds,
+                    startingPrice: values.startingPrice,
+                    bidIncrement: values.bidIncrement,
+                    capPrice: values.capPrice,
+                    durationSec: values.durationSec,
+                    extendThresholdSec: values.extendThresholdSec,
+                    extendSec: values.extendSec,
+                    scheduledStartAt: values.scheduledStartAt || undefined,
+                  })
+                  setBatchIds([])
+                  await refresh()
+                }}
+              />
+            )}
+          </section>
+
+          <section className="admin-card">
+            <h3>单个添加商品</h3>
             <label>
               选择商品
               <select
@@ -344,6 +461,41 @@ export function LiveRoomConsolePage() {
                   await refresh()
                 }}
               />
+            )}
+          </section>
+
+          <section className="admin-card">
+            <h3>评论管理</h3>
+            <p className="muted">屏蔽不当评论，房间内用户将不再看到</p>
+            {comments.length === 0 ? (
+              <p className="muted">暂无评论</p>
+            ) : (
+              <ul className="live-room-comments-admin">
+                {comments.map((c) => (
+                  <li key={c.id} className={c.isHidden ? 'live-room-comments-admin__hidden' : ''}>
+                    <div>
+                      <strong>{c.nickname}</strong>
+                      <span className="muted"> · {new Date(c.createdAt).toLocaleTimeString('zh-CN')}</span>
+                      <p>{c.content}</p>
+                    </div>
+                    {!c.isHidden && (
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        disabled={busy}
+                        onClick={() =>
+                          runAction(async () => {
+                            await hideRoomComment(c.id)
+                            await refreshComments()
+                          })
+                        }
+                      >
+                        屏蔽
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
         </>

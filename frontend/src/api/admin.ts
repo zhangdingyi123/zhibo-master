@@ -169,6 +169,28 @@ export function addSessionToLiveRoom(
   })
 }
 
+export function addSessionsBatchToLiveRoom(
+  liveRoomId: number,
+  body: PublishAuctionBody & { productIds: number[] },
+) {
+  return apiRequest<{ items: AuctionSession[]; count: number }>(
+    `/admin/live-rooms/${liveRoomId}/sessions/batch`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+}
+
+export function listRoomCommentsAdmin(roomId: string) {
+  return apiRequest<{ items: import('./social').RoomComment[] }>(
+    `/admin/rooms/${encodeURIComponent(roomId)}/comments`,
+  )
+}
+
+export function hideRoomComment(commentId: number) {
+  return apiRequest<{ ok: boolean }>(`/admin/comments/${commentId}/hide`, {
+    method: 'POST',
+  })
+}
+
 export function endCurrentAndSwitch(liveRoomId: number) {
   return apiRequest<LiveRoomDetail>(`/admin/live-rooms/${liveRoomId}/end-current`, {
     method: 'POST',

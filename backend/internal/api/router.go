@@ -48,6 +48,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	orderRepo := repository.NewOrderRepo(db)
 	bidRepo := repository.NewBidRepo(db)
 	messageRepo := repository.NewMessageRepo(db)
+	socialRepo := repository.NewSocialRepo(db)
 
 	payTimeout := time.Duration(cfg.PayTimeoutMinutes) * time.Minute
 	orderSvc := service.NewOrderService(orderRepo, productRepo, payTimeout)
@@ -80,6 +81,8 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	auctionSvc.SetSessionLocker(bidLocker)
 	liveRoomRepo := repository.NewLiveRoomRepo(db)
 	liveRoomSvc := service.NewLiveRoomService(liveRoomRepo, sessionRepo, productRepo, orderRepo, auctionSvc)
+	liveRoomSvc.SetUserRepo(userRepo)
+	liveRoomSvc.SetSocialRepo(socialRepo)
 	bidSvc := service.NewBidService(db, sessionRepo, bidRepo, productRepo, orderRepo, bidLocker)
 	if roomCache != nil {
 		userAuctionSvc.SetRoomCache(roomCache)
@@ -89,6 +92,8 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	}
 
 	hub := ws.NewHub(sessionRepo, bidRepo, userAuctionSvc, bidSvc, rdb, roomMQ)
+	socialSvc := service.NewSocialService(socialRepo, userRepo, liveRoomRepo, sessionRepo, productRepo)
+	socialSvc.SetBroadcaster(hub)
 	liveRoomSvc.SetRoomViewerCounter(hub)
 	wsNotifier := ws.NewNotifier(hub, bidRepo)
 	if roomCache != nil {
@@ -124,6 +129,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	messageH := handler.NewMessageHandler(messageSvc)
 	streamH := handler.NewStreamHandler(cfg)
 	liveRoomH := handler.NewLiveRoomHandler(liveRoomSvc)
+	socialH := handler.NewSocialHandler(socialSvc)
 
 	uploadDir := cfg.UploadDir
 	if err := os.MkdirAll(filepath.Join(uploadDir, "products"), 0o755); err != nil {
@@ -149,6 +155,8 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		user.GET("/auctions/:sessionId", userAuctionH.Get)
 		user.GET("/auctions/:sessionId/snapshot", userAuctionH.Snapshot)
 		user.GET("/rooms/:roomId", liveRoomH.GetByRoom)
+		user.GET("/rooms/:roomId/stats", middleware.OptionalAuth(userRepo, cfg.JWTSecret), socialH.GetRoomStats)
+		user.GET("/rooms/:roomId/comments", socialH.ListComments)
 		user.GET("/rooms/:roomId/snapshot", userAuctionH.SnapshotByRoom)
 		user.GET("/streams/:roomId", streamH.GetByRoom)
 		user.POST("/tts", aiH.SynthesizeSpeech)
@@ -170,6 +178,11 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 			userAuth.GET("/messages/unread-count", messageH.UnreadCount)
 			userAuth.POST("/messages/:id/read", messageH.MarkRead)
 			userAuth.POST("/messages/read-all", messageH.MarkAllRead)
+
+			userAuth.POST("/rooms/:roomId/comments", socialH.PostComment)
+			userAuth.POST("/rooms/:roomId/like", socialH.Like)
+			userAuth.POST("/products/:productId/favorite", socialH.ToggleFavorite)
+			userAuth.POST("/anchors/:anchorId/follow", socialH.ToggleFollow)
 		}
 	}
 
@@ -195,7 +208,10 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		admin.POST("/live-rooms/:id/start", liveRoomH.Start)
 		admin.POST("/live-rooms/:id/end", liveRoomH.End)
 		admin.POST("/live-rooms/:id/sessions", liveRoomH.AddSession)
+		admin.POST("/live-rooms/:id/sessions/batch", liveRoomH.AddSessionsBatch)
 		admin.POST("/live-rooms/:id/end-current", liveRoomH.EndCurrentAndSwitch)
+		admin.GET("/rooms/:roomId/comments", socialH.AdminListComments)
+		admin.POST("/comments/:commentId/hide", socialH.HideComment)
 
 		admin.GET("/orders", orderH.List)
 		admin.GET("/orders/:id", orderH.Get)
