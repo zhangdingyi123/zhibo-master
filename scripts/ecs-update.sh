@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "==> 1/4 拉取最新代码"
+echo "==> 1/5 拉取最新代码"
 if [[ -d .git ]]; then
   git pull --ff-only
 else
@@ -13,17 +13,21 @@ else
 fi
 
 echo ""
-echo "==> 2/4 数据库迁移"
+echo "==> 2/5 数据库迁移"
 bash scripts/migrate.sh
 
 echo ""
-echo "==> 3/4 重部署容器"
+echo "==> 3/5 重部署容器"
 bash scripts/redeploy.sh
 
 echo ""
-echo "==> 4/4 订单 API 冒烟（需买家 token 时可手动测）"
+echo "==> 4/5 API 健康检查"
 curl -sf http://127.0.0.1/api/v1/health | head -c 200
 echo ""
+
+echo ""
+echo "==> 5/5 AI 功能冒烟（文案生成 / TTS / Kimi 连通性）"
+bash scripts/test-ai.sh http://127.0.0.1 || true
 
 IP="${ECS_PUBLIC_IP:-47.97.176.185}"
 echo ""

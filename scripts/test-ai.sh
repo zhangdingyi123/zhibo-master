@@ -20,27 +20,30 @@ bold "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 echo ""
 echo "▶ Step 0: 基础健康检查..."
-HEALTH=$(curl -sf "$BASE_URL/api/v1/health" 2>&1) && {
+HEALTH_CODE=$(curl -s -o /tmp/zhibo-health.json -w "%{http_code}" "$BASE_URL/api/v1/health" 2>/dev/null || echo "000")
+HEALTH=$(cat /tmp/zhibo-health.json 2>/dev/null || true)
+if [[ "$HEALTH_CODE" == "200" ]]; then
   green "  ✓ 服务正常: $HEALTH"
   PASS=$((PASS+1))
-} || {
-  red "  ✗ 服务不可达，请确认后端已启动"
-  red "    检查: docker compose -f docker-compose.prod.yml ps backend"
+else
+  red "  ✗ 服务不可达或异常 (HTTP $HEALTH_CODE)"
+  [[ -n "$HEALTH" ]] && echo "    响应: ${HEALTH:0:120}"
+  red "    502 多为 backend 未启动，请先:"
+  red "      docker-compose -f docker-compose.prod.yml up -d mysql redis"
+  red "      bash scripts/redeploy.sh"
   exit 1
-}
+fi
 
 # ─── 1. 获取管理员 Token ─────────────────────────────────────
 echo ""
 echo "▶ Step 1: 登录获取管理员 Token..."
-LOGIN_RESP=$(curl -sf -X POST "$BASE_URL/api/v1/admin/login" \
+LOGIN_RESP=$(curl -sf -X POST "$BASE_URL/api/v1/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"phone":"13800000001","password":"123456"}' 2>&1)
 
 TOKEN=$(echo "$LOGIN_RESP" | grep -oP '"token"\s*:\s*"\K[^"]+' 2>/dev/null || true)
-
 if [[ -z "$TOKEN" ]]; then
-  # 尝试从 data 字段提取
-  TOKEN=$(echo "$LOGIN_RESP" | grep -oP '"data"\s*:\s*"\K[^"]+' 2>/dev/null || true)
+  TOKEN=$(echo "$LOGIN_RESP" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' | head -1)
 fi
 
 if [[ -n "$TOKEN" ]]; then
@@ -114,9 +117,8 @@ TEMPLATE_RESP=$(curl -sf -X POST "$BASE_URL/api/v1/admin/products/ai-intro" \
 # ─── 4. 测试 TTS 语音合成 ─────────────────────────────────────
 echo ""
 echo "▶ Step 4: 测试 TTS 语音合成..."
-TTS_RESP=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/v1/user/tts" \
+TTS_RESP=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/v1/tts" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
   -d '{"text":"欢迎来到直播间"}' 2>&1) && {
 
   if [[ "$TTS_RESP" == "200" ]]; then
