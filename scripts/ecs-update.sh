@@ -5,9 +5,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+git_pull() {
+  local attempt
+  for attempt in 1 2 3; do
+    if git -c http.version=HTTP/1.1 pull --ff-only; then
+      return 0
+    fi
+    echo "    git pull 失败（第 ${attempt}/3 次），3 秒后重试..."
+    sleep 3
+  done
+  echo "错误: git pull 多次失败。可手动执行：" >&2
+  echo "  git -c http.version=HTTP/1.1 pull --ff-only" >&2
+  echo "  或改用 SSH remote: git remote set-url origin git@github.com:USER/REPO.git" >&2
+  return 1
+}
+
 echo "==> 1/5 拉取最新代码"
 if [[ -d .git ]]; then
-  git pull --ff-only
+  git_pull
 else
   echo "（非 git 目录，跳过 pull）"
 fi
