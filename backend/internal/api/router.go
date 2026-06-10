@@ -55,12 +55,14 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	userAuctionSvc := service.NewUserAuctionService(sessionRepo, productRepo)
 	var bidLocker service.SessionLocker = service.NoopLocker{}
 	var roomCache service.RoomCache
-	if rdb, err := redisc.Open(cfg); err != nil {
+	var rdb *redisc.Client
+	if opened, err := redisc.Open(cfg); err != nil {
 		log.Printf("redis: %v (出价分布式锁已禁用，仅 DB 行锁+乐观锁)", err)
 	} else {
+		rdb = opened
 		bidLocker = rdb
 		roomCache = service.NewRedisRoomCache(rdb, sessionRepo)
-		log.Printf("redis: connected %s (lock + room cache)", cfg.RedisAddr)
+		log.Printf("redis: connected %s (lock + room cache + ws pub/sub)", cfg.RedisAddr)
 	}
 	auctionSvc := service.NewAuctionService(productRepo, sessionRepo, bidRepo, orderSvc)
 	auctionSvc.SetSessionLocker(bidLocker)
@@ -74,7 +76,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		liveRoomSvc.SetRoomCache(roomCache)
 	}
 
-	hub := ws.NewHub(sessionRepo, bidRepo, userAuctionSvc, bidSvc)
+	hub := ws.NewHub(sessionRepo, bidRepo, userAuctionSvc, bidSvc, rdb)
 	liveRoomSvc.SetRoomViewerCounter(hub)
 	wsNotifier := ws.NewNotifier(hub, bidRepo)
 	if roomCache != nil {

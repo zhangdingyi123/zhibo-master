@@ -3,16 +3,19 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/zhibo/backend/internal/domain"
 	"github.com/zhibo/backend/internal/infra/metrics"
+	redisc "github.com/zhibo/backend/internal/infra/redis"
 	"github.com/zhibo/backend/internal/repository"
 	"github.com/zhibo/backend/internal/service"
 )
 
 // Hub 按 roomId 隔离的 WebSocket 房间网关（4.1）
+// Redis Pub/Sub 开启时：带 seq 事件跨实例广播；倒计时 tick 仍本机推送（避免多实例重复 fan-out）
 type Hub struct {
 	rooms    map[string]*room
 	mu       sync.RWMutex
@@ -21,10 +24,13 @@ type Hub struct {
 	snap     *service.UserAuctionService
 	bidSvc   *service.BidService
 	limiter  *bidRateLimiter
+	redis    *redisc.Client
 
 	registerCh   chan *Client
 	unregisterCh chan *Client
 	broadcast    chan roomBroadcast
+
+	broadcastCancel context.CancelFunc
 }
 
 type room struct {
@@ -39,12 +45,13 @@ type roomBroadcast struct {
 	data   []byte
 }
 
-// NewHub 创建 WS 网关
+// NewHub 创建 WS 网关；传入 redis 时启用 Pub/Sub 多实例广播
 func NewHub(
 	sessions *repository.SessionRepo,
 	bids *repository.BidRepo,
 	snap *service.UserAuctionService,
 	bidSvc *service.BidService,
+	rdb *redisc.Client,
 ) *Hub {
 	h := &Hub{
 		rooms:      make(map[string]*room),
@@ -52,6 +59,7 @@ func NewHub(
 		bids:       bids,
 		snap:       snap,
 		bidSvc:     bidSvc,
+		redis:      rdb,
 		limiter:    newBidRateLimiter(300 * time.Millisecond),
 		registerCh:   make(chan *Client),
 		unregisterCh: make(chan *Client),
@@ -59,7 +67,38 @@ func NewHub(
 	}
 	go h.run()
 	go h.runCountdownLoop()
+	if rdb != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		h.broadcastCancel = cancel
+		if err := rdb.StartRoomBroadcastSubscriber(ctx, h.onRedisBroadcast); err != nil {
+			log.Printf("ws: redis broadcast subscriber: %v", err)
+		} else {
+			log.Printf("ws: redis pub/sub broadcast enabled (multi-instance)")
+		}
+	}
 	return h
+}
+
+func (h *Hub) onRedisBroadcast(roomID string, envelopeJSON []byte) {
+	h.deliver(roomID, envelopeJSON)
+}
+
+func parseRoomEventFromEnvelope(raw []byte) *RoomEvent {
+	var env Envelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil
+	}
+	var ev RoomEvent
+	if len(env.Payload) > 0 {
+		_ = json.Unmarshal(env.Payload, &ev)
+	}
+	if ev.Seq == 0 && env.Seq > 0 {
+		ev.Seq = env.Seq
+	}
+	if ev.Type == "" {
+		return nil
+	}
+	return &ev
 }
 
 func (h *Hub) run() {
@@ -161,14 +200,40 @@ func (h *Hub) broadcastEphemeral(roomID, eventType string, payload any) {
 
 // Publish 向房间追加事件并广播（带 seq，供重连补偿）
 func (h *Hub) Publish(roomID, eventType string, payload any) uint64 {
-	r := h.getOrCreateRoom(roomID)
 	ev := RoomEvent{
 		Type:    eventType,
 		Ts:      time.Now().UnixMilli(),
 		Payload: marshalPayload(payload),
 	}
-	seq := r.store.Append(ev)
 
+	if h.redis != nil {
+		ctx := context.Background()
+		seq, err := h.redis.IncrRoomEventSeq(ctx, roomID)
+		if err != nil {
+			log.Printf("ws: incr room seq %s: %v", roomID, err)
+			return 0
+		}
+		ev.Seq = seq
+		env := Envelope{
+			Type:      ServerEvent,
+			RoomID:    roomID,
+			Seq:       seq,
+			Timestamp: ev.Ts,
+			Payload:   marshalPayload(ev),
+		}
+		b, err := json.Marshal(env)
+		if err != nil {
+			return seq
+		}
+		if err := h.redis.StoreAndPublishRoomEvent(ctx, roomID, b); err != nil {
+			log.Printf("ws: publish room event %s: %v", roomID, err)
+		}
+		// 投递由 Pub/Sub 回调 onRedisBroadcast 完成（含本实例）
+		return seq
+	}
+
+	r := h.getOrCreateRoom(roomID)
+	seq := r.store.Append(ev)
 	env := Envelope{
 		Type:      ServerEvent,
 		RoomID:    roomID,
@@ -211,8 +276,24 @@ func (h *Hub) handleSubscribe(c *Client, payload SubscribePayload) {
 	c.lastSeq = payload.LastSeq
 	h.registerClient(c)
 
-	r := h.getOrCreateRoom(roomID)
-	currentSeq := r.store.CurrentSeq()
+	h.getOrCreateRoom(roomID)
+	var currentSeq uint64
+	var missed []RoomEvent
+	if h.redis != nil {
+		currentSeq, _ = h.redis.CurrentRoomEventSeq(ctx, roomID)
+		if payload.LastSeq > 0 && payload.LastSeq < currentSeq {
+			rawList, err := h.redis.RoomEventsSince(ctx, roomID, payload.LastSeq)
+			if err == nil {
+				missed = roomEventsFromStored(rawList)
+			}
+		}
+	} else {
+		r := h.getOrCreateRoom(roomID)
+		currentSeq = r.store.CurrentSeq()
+		if payload.LastSeq > 0 && payload.LastSeq < currentSeq {
+			missed = r.store.Since(payload.LastSeq)
+		}
+	}
 
 	snap, err := h.snap.SnapshotByRoom(ctx, roomID)
 	if err != nil {
@@ -224,8 +305,7 @@ func (h *Hub) handleSubscribe(c *Client, payload SubscribePayload) {
 	}
 
 	// 重连补偿（4.6）
-	if payload.LastSeq > 0 && payload.LastSeq < currentSeq {
-		missed := r.store.Since(payload.LastSeq)
+	if len(missed) > 0 {
 		c.sendJSON(Envelope{
 			Type:     ServerSync,
 			ClientID: c.clientID,
@@ -259,6 +339,16 @@ func (h *Hub) handleSubscribe(c *Client, payload SubscribePayload) {
 			Payload:  marshalPayload(SyncPayload{Snapshot: snap, Events: nil}),
 		})
 	}
+}
+
+func roomEventsFromStored(rawList [][]byte) []RoomEvent {
+	out := make([]RoomEvent, 0, len(rawList))
+	for _, raw := range rawList {
+		if ev := parseRoomEventFromEnvelope(raw); ev != nil {
+			out = append(out, *ev)
+		}
+	}
+	return out
 }
 
 func (h *Hub) handleClientMessage(c *Client, data []byte) {

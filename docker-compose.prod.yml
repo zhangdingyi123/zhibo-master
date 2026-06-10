@@ -35,7 +35,7 @@ services:
       dockerfile: Dockerfile
     container_name: zhibo-backend
     restart: unless-stopped
-    environment:
+    environment: &backend_env
       PORT: 8081
       MYSQL_DSN: ${MYSQL_DSN:-zhibo:zhibo@tcp(mysql:3306)/zhibo?charset=utf8mb4&parseTime=True&loc=Local}
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
@@ -51,6 +51,23 @@ services:
       AI_TTS_MODEL: ${AI_TTS_MODEL:-tts-1}
       AI_TTS_VOICE: ${AI_TTS_VOICE:-nova}
       UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # 第二 API/WS 实例：Redis Pub/Sub 跨节点房间广播（见 docs/scaling.md）
+  backend-2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zhibo-backend-2
+    restart: unless-stopped
+    environment:
+      <<: *backend_env
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -79,6 +96,7 @@ services:
     depends_on:
       - frontend
       - backend
+      - backend-2
       - grafana
 
   prometheus:

@@ -10,7 +10,7 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       # 生产：与 docker-compose.prod.yml 同网，Prometheus 容器内直连 backend
-      - targets: ['zhibo-backend:8081']
+      - targets: ['zhibo-backend:8081', 'zhibo-backend-2:8081']
         labels:
           service: zhibo-api
           env: prod

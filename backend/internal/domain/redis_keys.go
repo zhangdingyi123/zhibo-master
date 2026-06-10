@@ -43,6 +43,21 @@ func RoomEventSeqKey(roomID string) string {
 	return fmt.Sprintf("%s:room:%s:seq", redisPrefix, roomID)
 }
 
+// RoomEventListKey 房间事件环形缓冲（LIST），多实例共享供重连补偿
+func RoomEventListKey(roomID string) string {
+	return fmt.Sprintf("%s:room:%s:events", redisPrefix, roomID)
+}
+
+// RoomBroadcastChannel 房间 WS 广播 Pub/Sub 频道（多实例水平扩展）
+func RoomBroadcastChannel(roomID string) string {
+	return fmt.Sprintf("%s:room:%s:broadcast", redisPrefix, roomID)
+}
+
+// RoomBroadcastPattern 订阅所有房间广播
+func RoomBroadcastPattern() string {
+	return fmt.Sprintf("%s:room:*:broadcast", redisPrefix)
+}
+
 // SessionSnapshotKey 按场次 ID 的快照（与 RoomSnapshotKey 双写，便于按 ID 查询）
 func SessionSnapshotKey(sessionID uint64) string {
 	return fmt.Sprintf("%s:session:%d:snapshot", redisPrefix, sessionID)
