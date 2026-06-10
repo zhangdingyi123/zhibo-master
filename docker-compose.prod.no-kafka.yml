@@ -1,0 +1,25 @@
+# 国内 ECS 拉取 Kafka/Redpanda 超时时使用：
+#   SKIP_KAFKA=1 bash scripts/redeploy.sh
+# 双 backend 仍可用，跨实例 WS 降级为 Redis Pub/Sub（见 docs/scaling.md）
+services:
+  kafka:
+    profiles:
+      - kafka-only
+
+  backend:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: ""
+
+  backend-2:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: ""

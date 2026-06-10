@@ -22,6 +22,11 @@ if [[ -d .git ]] && [[ "${SKIP_GIT_PULL:-}" != "1" ]]; then
 fi
 
 COMPOSE_FILE="docker-compose.prod.yml"
+COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+
+if [[ "${SKIP_KAFKA:-}" == "1" ]]; then
+  COMPOSE_ARGS+=(-f docker-compose.prod.no-kafka.yml)
+fi
 
 if docker compose version >/dev/null 2>&1; then
   COMPOSE="docker compose"
@@ -39,18 +44,28 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-echo "==> 使用: $COMPOSE -f $COMPOSE_FILE"
+if [[ "${SKIP_KAFKA:-}" == "1" ]]; then
+  echo "==> SKIP_KAFKA=1：不启动 Kafka，跨实例 WS 使用 Redis Pub/Sub"
+fi
+echo "==> 使用: $COMPOSE ${COMPOSE_ARGS[*]}"
 echo "==> 停止旧容器（保留数据卷）..."
-$COMPOSE -f "$COMPOSE_FILE" down --remove-orphans
+$COMPOSE "${COMPOSE_ARGS[@]}" down --remove-orphans
+
+if [[ "${SKIP_KAFKA:-}" != "1" ]] && ! docker image inspect "${KAFKA_IMAGE:-docker.redpanda.com/redpandadata/redpanda:v24.2.4}" >/dev/null 2>&1; then
+  if [[ -x scripts/pull-kafka-image.sh ]]; then
+    echo "==> 本地无 Kafka 镜像，尝试加速拉取..."
+    bash scripts/pull-kafka-image.sh || true
+  fi
+fi
 
 echo "==> 构建并启动..."
-$COMPOSE -f "$COMPOSE_FILE" up -d --build
+$COMPOSE "${COMPOSE_ARGS[@]}" up -d --build
 
 echo "==> 等待服务就绪..."
 sleep 5
 
 echo "==> 容器状态"
-$COMPOSE -f "$COMPOSE_FILE" ps
+$COMPOSE "${COMPOSE_ARGS[@]}" ps
 
 echo ""
 echo "==> 健康检查"
@@ -63,6 +78,6 @@ if curl -sf http://127.0.0.1/api/v1/health; then
   echo "  主播端: http://${IP}/admin"
 else
   echo ""
-  echo "✗ API 未响应，查看日志: $COMPOSE -f $COMPOSE_FILE logs --tail 80 backend" >&2
+  echo "✗ API 未响应，查看日志: $COMPOSE ${COMPOSE_ARGS[*]} logs --tail 80 backend" >&2
   exit 1
 fi

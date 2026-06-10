@@ -30,8 +30,9 @@ services:
       retries: 20
 
   # Kafka（Redpanda 单节点，WS 跨实例广播）
+  # 国内 ECS 拉取失败：bash scripts/pull-kafka-image.sh 或 SKIP_KAFKA=1 redeploy
   kafka:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.2.4
+    image: ${KAFKA_IMAGE:-docker.redpanda.com/redpandadata/redpanda:v24.2.4}
     container_name: zhibo-kafka
     hostname: kafka
     restart: unless-stopped
