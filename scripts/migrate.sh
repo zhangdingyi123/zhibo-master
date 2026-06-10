@@ -6,19 +6,51 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+MYSQL_CONTAINER="${MYSQL_CONTAINER:-zhibo-mysql}"
+
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
+MYSQL_USER="${MYSQL_USER:-zhibo}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-zhibo}"
+MYSQL_DATABASE="${MYSQL_DATABASE:-zhibo}"
 
 if docker compose version >/dev/null 2>&1; then
   COMPOSE="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then
   COMPOSE="docker-compose"
 else
-  echo "错误: 未找到 docker compose" >&2
-  exit 1
+  COMPOSE=""
 fi
 
 mysql_exec() {
+  if docker inspect -f '{{.State.Running}}' "$MYSQL_CONTAINER" 2>/dev/null | grep -q true; then
+    docker exec -i "$MYSQL_CONTAINER" env MYSQL_PWD="$MYSQL_PASSWORD" \
+      mysql -u"$MYSQL_USER" "$MYSQL_DATABASE" "$@"
+    return
+  fi
+  if [[ -n "$COMPOSE" ]]; then
+    $COMPOSE -f "$COMPOSE_FILE" exec -T mysql sh -c \
+      'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" '"$*"
+    return
+  fi
+  echo "错误: MySQL 容器 $MYSQL_CONTAINER 未运行，且未找到 docker compose" >&2
+  return 1
+}
+
+mysql_apply_file() {
+  local file="$1"
+  if docker inspect -f '{{.State.Running}}' "$MYSQL_CONTAINER" 2>/dev/null | grep -q true; then
+    docker exec -i "$MYSQL_CONTAINER" env MYSQL_PWD="$MYSQL_PASSWORD" \
+      mysql -u"$MYSQL_USER" "$MYSQL_DATABASE" < "$file"
+    return
+  fi
   $COMPOSE -f "$COMPOSE_FILE" exec -T mysql sh -c \
-    'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" '"$*"
+    'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' < "$file"
 }
 
 run_file_if_needed() {
@@ -38,14 +70,20 @@ run_file_if_needed() {
   fi
 
   echo "==> 应用 $name ..."
-  $COMPOSE -f "$COMPOSE_FILE" exec -T mysql sh -c \
-    'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' < "$file"
+  mysql_apply_file "$file"
   echo "✓ $name 完成"
 }
 
-echo "==> 检查 MySQL 连接..."
-if ! mysql_exec -e "SELECT 1" >/dev/null 2>&1; then
-  echo "错误: 无法连接 MySQL，请先启动: $COMPOSE -f $COMPOSE_FILE up -d mysql" >&2
+echo "==> 检查 MySQL 连接（容器: $MYSQL_CONTAINER）..."
+if ! err="$(mysql_exec -e "SELECT 1" 2>&1)"; then
+  echo "错误: 无法连接 MySQL" >&2
+  echo "  详情: $err" >&2
+  if [[ -n "$COMPOSE" ]]; then
+    echo "  请先启动: $COMPOSE -f $COMPOSE_FILE up -d mysql" >&2
+  else
+    echo "  请先启动 MySQL 容器: $MYSQL_CONTAINER" >&2
+  fi
+  echo "  可手动测试: docker exec $MYSQL_CONTAINER mysql -u$MYSQL_USER -p zhibo -e \"SELECT 1\"" >&2
   exit 1
 fi
 
