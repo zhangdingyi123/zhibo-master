@@ -8,16 +8,28 @@ cd "$ROOT"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-zhibo-mysql}"
 
-if [[ -f .env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env
-  set +a
-fi
+# 勿 source 整个 .env：MYSQL_DSN 含 tcp(...) 括号会导致 bash 语法错误
+env_var() {
+  local key="$1" default="$2"
+  if [[ -f .env ]]; then
+    local line val
+    line="$(grep -E "^${key}=" .env | tail -1 || true)"
+    if [[ -n "$line" ]]; then
+      val="${line#*=}"
+      val="${val%\"}"; val="${val#\"}"
+      val="${val%\'}"; val="${val#\'}"
+      if [[ -n "$val" ]]; then
+        echo "$val"
+        return
+      fi
+    fi
+  fi
+  echo "$default"
+}
 
-MYSQL_USER="${MYSQL_USER:-zhibo}"
-MYSQL_PASSWORD="${MYSQL_PASSWORD:-zhibo}"
-MYSQL_DATABASE="${MYSQL_DATABASE:-zhibo}"
+MYSQL_USER="$(env_var MYSQL_USER zhibo)"
+MYSQL_PASSWORD="$(env_var MYSQL_PASSWORD zhibo)"
+MYSQL_DATABASE="$(env_var MYSQL_DATABASE zhibo)"
 
 if docker compose version >/dev/null 2>&1; then
   COMPOSE="docker compose"
