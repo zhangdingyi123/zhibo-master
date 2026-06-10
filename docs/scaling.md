@@ -30,15 +30,31 @@ Pod-1         Pod-2   （各实例独立 Consumer Group → fan-out）
 - **带 seq 事件**（出价、排名、成交）：Kafka 广播
 - **倒计时 tick**：各实例对本机有观众的房间本地推送
 
-## 部署
+## 部署（ECS · git pull）
+
+在 ECS `/opt/zhibo` 目录：
 
 ```bash
-# 全栈（含 Kafka + 双 backend）
+# 推荐：拉代码 + 迁移 + 全量重部署
+bash scripts/ecs-update.sh
+```
+
+或分步：
+
+```bash
+cd /opt/zhibo
+git -c http.version=HTTP/1.1 pull --ff-only
+bash scripts/migrate.sh
+
+# 全栈
 docker-compose -f docker-compose.prod.yml up -d --build
 
-# 仅更新后端与网关
+# 仅 Kafka + 双 backend + Nginx
 docker-compose -f docker-compose.prod.yml up -d --build kafka backend backend-2 nginx
 ```
+
+> 使用 `docker compose`（V2 插件）时把 `docker-compose` 换成 `docker compose`。  
+> `git pull` 若 TLS 失败见结项文档 §26.4。
 
 ### 环境变量
 

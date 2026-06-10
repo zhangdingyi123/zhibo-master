@@ -5,6 +5,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# 由 ecs-update.sh 调用时已 pull，可 SKIP_GIT_PULL=1 跳过
+if [[ -d .git ]] && [[ "${SKIP_GIT_PULL:-}" != "1" ]]; then
+  echo "==> 拉取最新代码 (git pull)..."
+  for attempt in 1 2 3; do
+    if git -c http.version=HTTP/1.1 pull --ff-only; then
+      break
+    fi
+    if [[ "$attempt" -eq 3 ]]; then
+      echo "错误: git pull 失败，请检查网络或改用 SSH remote" >&2
+      exit 1
+    fi
+    echo "    重试 ${attempt}/3..."
+    sleep 3
+  done
+fi
+
 COMPOSE_FILE="docker-compose.prod.yml"
 
 if docker compose version >/dev/null 2>&1; then

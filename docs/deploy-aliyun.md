@@ -103,15 +103,30 @@ docker compose version
 
 任选一种方式：
 
-### 方式 A：Git 克隆（推荐）
+### 方式 A：Git 克隆（**推荐，日常用 pull 更新**）
 
 ```bash
 cd /opt
-git clone <你的仓库地址> zhibo
+git clone https://github.com/zhangdingyi123/zhibo-master.git zhibo
 cd zhibo
 ```
 
-### 方式 B：本地上传
+**后续更新代码**（在 ECS 上）：
+
+```bash
+cd /opt/zhibo
+bash scripts/ecs-update.sh
+# 等价于：git pull → migrate → redeploy
+```
+
+`git pull` 若报 `GnuTLS recv error`：
+
+```bash
+git -c http.version=HTTP/1.1 pull --ff-only
+# 或改用 SSH：git remote set-url origin git@github.com:zhangdingyi123/zhibo-master.git
+```
+
+### 方式 B：本地上传（仅首次无 Git 时备用）
 
 ```bash
 # 在本地项目根目录执行

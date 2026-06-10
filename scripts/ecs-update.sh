@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ECS 更新：拉代码 → 执行迁移 → 重部署 → 验证
+# ECS 更新：git pull → 迁移 → 重部署 → 验证
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,11 +16,11 @@ git_pull() {
   done
   echo "错误: git pull 多次失败。可手动执行：" >&2
   echo "  git -c http.version=HTTP/1.1 pull --ff-only" >&2
-  echo "  或改用 SSH remote: git remote set-url origin git@github.com:USER/REPO.git" >&2
+  echo "  或改用 SSH: git remote set-url origin git@github.com:zhangdingyi123/zhibo-master.git" >&2
   return 1
 }
 
-echo "==> 1/5 拉取最新代码"
+echo "==> 1/5 拉取最新代码 (git pull)"
 if [[ -d .git ]]; then
   git_pull
 else
@@ -33,7 +33,7 @@ bash scripts/migrate.sh
 
 echo ""
 echo "==> 3/5 重部署容器"
-bash scripts/redeploy.sh
+SKIP_GIT_PULL=1 bash scripts/redeploy.sh
 
 echo ""
 echo "==> 4/5 API 健康检查"
