@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { getAuction, getLiveRoom, type UserLiveRoomDetail } from '../../api/user'
 import type { SessionSummary } from '../../api/types'
 import { AuctionLiveRoom } from '../../components/auction/AuctionLiveRoom'
-import type { SessionSwitchPayload } from '../../ws/types'
+import type { AuctionSession, SessionSwitchPayload } from '../../ws/types'
 
 function buildStripItems(detail: UserLiveRoomDetail): SessionSummary[] {
   const items = [...detail.history]
@@ -109,7 +109,7 @@ export function LiveRoomPage() {
       setDescription(p.description)
       setCoverUrl(p.coverUrl)
       setSessionId(s.id)
-      setScheduledStartAt(s.scheduledStartAt)
+      setScheduledStartAt((s as any).scheduledStartAt ?? s.scheduledStartAt)
     }
     setStripItems(items.sort((a, b) => a.seqInRoom - b.seqInRoom))
   }, [])
