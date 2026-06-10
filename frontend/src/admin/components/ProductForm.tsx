@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { generateProductIntro } from '../../api/admin'
+import { useRef, useState } from 'react'
+import { generateProductIntro, uploadImage } from '../../api/admin'
 import type { ProductBody, ProductView } from '../../api/types'
 
 interface ProductFormProps {
@@ -15,6 +15,12 @@ function parseImages(raw: string): string[] {
     .filter(Boolean)
 }
 
+function appendImages(raw: string, urls: string[]): string {
+  const existing = parseImages(raw)
+  const merged = [...existing, ...urls.filter((u) => !existing.includes(u))]
+  return merged.join('\n')
+}
+
 export function ProductForm({ initial, onSubmit, submitLabel }: ProductFormProps) {
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
@@ -27,6 +33,10 @@ export function ProductForm({ initial, onSubmit, submitLabel }: ProductFormProps
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [uploadingGallery, setUploadingGallery] = useState(false)
+  const coverInputRef = useRef<HTMLInputElement>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
 
   async function handleAiGenerate() {
     setError(null)
@@ -54,6 +64,52 @@ export function ProductForm({ initial, onSubmit, submitLabel }: ProductFormProps
     }
   }
 
+  async function handleCoverFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    setError(null)
+    setUploadingCover(true)
+    try {
+      const { url } = await uploadImage(file)
+      setCoverUrl(url)
+      setImagesRaw((prev) => {
+        const images = parseImages(prev)
+        if (images.includes(url)) return prev
+        return images.length ? prev : url
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '封面图上传失败')
+    } finally {
+      setUploadingCover(false)
+    }
+  }
+
+  async function handleGalleryFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    e.target.value = ''
+    if (!files?.length) return
+
+    setError(null)
+    setUploadingGallery(true)
+    try {
+      const urls: string[] = []
+      for (const file of Array.from(files)) {
+        const { url } = await uploadImage(file)
+        urls.push(url)
+      }
+      setImagesRaw((prev) => appendImages(prev, urls))
+      if (!coverUrl.trim() && urls[0]) {
+        setCoverUrl(urls[0])
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '商品图上传失败')
+    } finally {
+      setUploadingGallery(false)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -64,7 +120,7 @@ export function ProductForm({ initial, onSubmit, submitLabel }: ProductFormProps
     const images = parseImages(imagesRaw)
     const cover = coverUrl.trim() || images[0] || ''
     if (!cover) {
-      setError('请填写封面图 URL 或图片列表')
+      setError('请上传封面图或填写图片 URL')
       return
     }
 
@@ -82,6 +138,8 @@ export function ProductForm({ initial, onSubmit, submitLabel }: ProductFormProps
       setLoading(false)
     }
   }
+
+  const galleryPreview = parseImages(imagesRaw)
 
   return (
     <form className="admin-form" onSubmit={handleSubmit}>
@@ -121,21 +179,39 @@ export function ProductForm({ initial, onSubmit, submitLabel }: ProductFormProps
       </div>
       {aiHint && <p className="form-hint">{aiHint}</p>}
       <label>
-        封面图 URL *
+        封面图 *
         <input
           type="url"
-          placeholder="https://..."
+          placeholder="https://... 或点击下方选择本地图片"
           value={coverUrl}
           onChange={(e) => setCoverUrl(e.target.value)}
         />
       </label>
+      <div className="image-upload-row">
+        <input
+          ref={coverInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          className="image-upload-input"
+          onChange={handleCoverFileChange}
+        />
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => coverInputRef.current?.click()}
+          disabled={uploadingCover || loading}
+        >
+          {uploadingCover ? '上传中…' : '选择本地封面图'}
+        </button>
+        <span className="field-hint">支持 JPG / PNG / GIF / WebP，最大 5MB</span>
+      </div>
       {coverUrl && (
         <div className="image-preview">
           <img src={coverUrl} alt="封面预览" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
         </div>
       )}
       <label>
-        商品图 URL（每行一个，或用逗号分隔）
+        商品图（每行一个 URL，或用逗号分隔）
         <textarea
           rows={3}
           value={imagesRaw}
@@ -143,9 +219,34 @@ export function ProductForm({ initial, onSubmit, submitLabel }: ProductFormProps
           placeholder="https://example.com/1.jpg"
         />
       </label>
+      <div className="image-upload-row">
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          multiple
+          className="image-upload-input"
+          onChange={handleGalleryFileChange}
+        />
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => galleryInputRef.current?.click()}
+          disabled={uploadingGallery || loading}
+        >
+          {uploadingGallery ? '上传中…' : '选择本地商品图（可多选）'}
+        </button>
+      </div>
+      {galleryPreview.length > 0 && (
+        <div className="image-preview-grid">
+          {galleryPreview.map((url) => (
+            <img key={url} src={url} alt="商品图预览" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          ))}
+        </div>
+      )}
       {error && <p className="form-error">{error}</p>}
       <div className="admin-form__actions">
-        <button type="submit" className="btn-primary" disabled={loading}>
+        <button type="submit" className="btn-primary" disabled={loading || uploadingCover || uploadingGallery}>
           {loading ? '保存中…' : submitLabel}
         </button>
       </div>

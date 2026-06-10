@@ -6,6 +6,9 @@ Thumbs.db
 .env
 .env.local
 
+# Uploads
+uploads/
+
 # Go
 backend/bin/
 *.exe

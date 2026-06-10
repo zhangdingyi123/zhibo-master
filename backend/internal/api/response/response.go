@@ -98,6 +98,12 @@ func mapError(err error) (httpStatus, code int, message string) {
 		return http.StatusBadGateway, 50200, err.Error()
 	case errors.Is(err, domain.ErrTTSInputRequired):
 		return http.StatusBadRequest, 40000, err.Error()
+	case errors.Is(err, domain.ErrUploadFileRequired),
+		errors.Is(err, domain.ErrUploadFileTooLarge),
+		errors.Is(err, domain.ErrUploadInvalidType):
+		return http.StatusBadRequest, 40000, err.Error()
+	case errors.Is(err, domain.ErrUploadFailed):
+		return http.StatusInternalServerError, 50000, err.Error()
 	default:
 		return http.StatusInternalServerError, 50000, "服务器内部错误"
 	}

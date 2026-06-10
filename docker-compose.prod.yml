@@ -50,6 +50,9 @@ services:
       AI_MODEL: ${AI_MODEL:-moonshot-v1-8k}
       AI_TTS_MODEL: ${AI_TTS_MODEL:-tts-1}
       AI_TTS_VOICE: ${AI_TTS_VOICE:-nova}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       mysql:
         condition: service_healthy
@@ -116,5 +119,6 @@ services:
 volumes:
   mysql_data:
   redis_data:
+  uploads_data:
   prometheus_data:
   grafana_data:

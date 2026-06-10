@@ -1,4 +1,5 @@
-import { apiRequest } from './client'
+import { applyAuthHeaders } from './authHeaders'
+import { apiRequest, ApiError } from './client'
 import type {
   AuctionSession,
   LiveRoom,
@@ -34,6 +35,33 @@ export function getProduct(id: number) {
 export interface GenerateProductIntroResult {
   description: string
   source: 'llm' | 'template'
+}
+
+export interface UploadImageResult {
+  url: string
+}
+
+export async function uploadImage(file: File): Promise<UploadImageResult> {
+  const form = new FormData()
+  form.append('file', file)
+  const headers = new Headers()
+  applyAuthHeaders(headers)
+
+  const res = await fetch('/api/v1/admin/upload', {
+    method: 'POST',
+    body: form,
+    headers,
+  })
+  let json: { code: number; message: string; data?: UploadImageResult }
+  try {
+    json = (await res.json()) as typeof json
+  } catch {
+    throw new ApiError('网络响应解析失败', -1)
+  }
+  if (json.code !== 0) {
+    throw new ApiError(json.message || '上传失败', json.code)
+  }
+  return json.data as UploadImageResult
 }
 
 export function generateProductIntro(body: { name: string; keywords?: string }) {

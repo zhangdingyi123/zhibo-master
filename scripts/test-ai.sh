@@ -117,36 +117,36 @@ TEMPLATE_RESP=$(curl -sf -X POST "$BASE_URL/api/v1/admin/products/ai-intro" \
 # ─── 4. 测试 TTS 语音合成 ─────────────────────────────────────
 echo ""
 echo "▶ Step 4: 测试 TTS 语音合成..."
-TTS_RESP=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/v1/tts" \
+TTS_RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/v1/tts" \
   -H "Content-Type: application/json" \
-  -d '{"text":"欢迎来到直播间"}' 2>&1) && {
+  -d '{"text":"欢迎来到直播间"}' 2>/dev/null || echo "000")
 
-  if [[ "$TTS_RESP" == "200" ]]; then
-    green "  ✓ TTS 合成成功（HTTP 200）"
-    PASS=$((PASS+1))
-  elif [[ "$TTS_RESP" == "503" ]]; then
-    echo "  ℹ TTS 不可用（503）— Kimi 不提供 TTS，这是正常现象"
-    echo "    浏览器端会自动回退到 Web Speech API"
-    PASS=$((PASS+1))
-  else
-    red "  ✗ TTS 返回异常 HTTP $TTS_RESP"
-    FAIL=$((FAIL+1))
-  fi
-} || {
-  red "  ✗ TTS 请求失败"
+if [[ "$TTS_RESP" == "200" ]]; then
+  green "  ✓ TTS 合成成功（HTTP 200）"
+  PASS=$((PASS+1))
+elif [[ "$TTS_RESP" == "503" ]]; then
+  echo "  ℹ TTS 不可用（503）— 未配置 Key 或 Kimi 不支持 TTS，属正常"
+  echo "    浏览器端会自动回退到 Web Speech API"
+  PASS=$((PASS+1))
+elif [[ "$TTS_RESP" == "502" ]]; then
+  echo "  ℹ TTS 上游失败（502）— Moonshot 无 /audio/speech，浏览器语音兜底"
+  PASS=$((PASS+1))
+else
+  red "  ✗ TTS 返回异常 HTTP $TTS_RESP"
   FAIL=$((FAIL+1))
-}
+fi
 
 # ─── 5. 直接测试 Kimi API 连通性 ──────────────────────────────
 echo ""
 echo "▶ Step 5: 直接测试 Kimi API 连通性..."
 
-# 从 .env 读取配置
+# 从项目根 .env 读取配置（无论从哪个目录执行）
+SCRIPT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE=""
-if [[ -f ".env" ]]; then
+if [[ -f "$SCRIPT_ROOT/.env" ]]; then
+  ENV_FILE="$SCRIPT_ROOT/.env"
+elif [[ -f ".env" ]]; then
   ENV_FILE=".env"
-elif [[ -f "../.env" ]]; then
-  ENV_FILE="../.env"
 fi
 
 if [[ -n "$ENV_FILE" ]]; then

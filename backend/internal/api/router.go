@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -109,6 +111,13 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	streamH := handler.NewStreamHandler(cfg)
 	liveRoomH := handler.NewLiveRoomHandler(liveRoomSvc)
 
+	uploadDir := cfg.UploadDir
+	if err := os.MkdirAll(filepath.Join(uploadDir, "products"), 0o755); err != nil {
+		log.Printf("upload dir: %v", err)
+	}
+	r.Static("/uploads", uploadDir)
+	uploadH := handler.NewUploadHandler(uploadDir)
+
 	v1 := r.Group("/api/v1")
 	{
 		v1.GET("/ping", func(c *gin.Context) {
@@ -153,6 +162,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	admin := v1.Group("/admin")
 	admin.Use(middleware.RequireAuth(userRepo, cfg.JWTSecret), middleware.RequireAnchor())
 	{
+		admin.POST("/upload", uploadH.UploadImage)
 		admin.POST("/products/ai-intro", aiH.GenerateProductIntro)
 		admin.POST("/products", productH.Create)
 		admin.GET("/products", productH.List)

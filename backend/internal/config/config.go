@@ -23,6 +23,7 @@ type Config struct {
 	AIModel      string
 	AITTSModel   string
 	AITTSVoice   string
+	UploadDir    string
 }
 
 func Load() Config {
@@ -53,6 +54,7 @@ func Load() Config {
 		AIModel:           getEnv("AI_MODEL", "gpt-4o-mini"),
 		AITTSModel:        getEnv("AI_TTS_MODEL", "tts-1"),
 		AITTSVoice:        getEnv("AI_TTS_VOICE", "nova"),
+		UploadDir:         getEnv("UPLOAD_DIR", "./uploads"),
 	}
 }
 

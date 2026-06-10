@@ -58,4 +58,9 @@ var (
 	ErrTTSServiceUnavailable = errors.New("TTS 服务未配置或暂不可用")
 	ErrTTSInputRequired     = errors.New("解说文本不能为空")
 	ErrTTSSynthesisFailed   = errors.New("语音合成失败")
+
+	ErrUploadFileRequired  = errors.New("请选择要上传的图片")
+	ErrUploadFileTooLarge  = errors.New("图片大小不能超过 5MB")
+	ErrUploadInvalidType   = errors.New("仅支持 JPG、PNG、GIF、WebP 图片")
+	ErrUploadFailed        = errors.New("图片上传失败")
 )
